@@ -124,8 +124,13 @@ def redact_text(text: str) -> str:
     return redacted
 
 
-def run_command(command: list[str], timeout: int = 20) -> dict[str, Any]:
-    if shutil.which(command[0]) is None and Path(command[0]).name == command[0]:
+def run_command(
+    command: list[str],
+    timeout: int = 20,
+    env: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    path = env.get("PATH") if env is not None else None
+    if shutil.which(command[0], path=path) is None and Path(command[0]).name == command[0]:
         return {
             "command": command,
             "status": "skipped",
@@ -138,6 +143,7 @@ def run_command(command: list[str], timeout: int = 20) -> dict[str, Any]:
             text=True,
             timeout=timeout,
             check=False,
+            env=env,
         )
     except subprocess.TimeoutExpired as exc:
         return {
@@ -275,14 +281,22 @@ def doctor_codex_environment(
             }
 
     if run_commands:
-        report["commands"]["codex_version"] = run_command(["codex", "--version"])
-        report["commands"]["codex_mcp_list"] = run_command(["codex", "mcp", "list"])
+        command_env = os.environ.copy()
+        command_env["CODEX_HOME"] = str(home)
+        report["commands"]["codex_version"] = run_command(
+            ["codex", "--version"], env=command_env
+        )
+        report["commands"]["codex_mcp_list"] = run_command(
+            ["codex", "mcp", "list"], env=command_env
+        )
         if importlib.util.find_spec("codex_fast_proxy") is not None:
             report["commands"]["codex_fast_proxy_status"] = run_command(
-                [sys.executable, "-m", "codex_fast_proxy", "status"]
+                [sys.executable, "-m", "codex_fast_proxy", "status"],
+                env=command_env,
             )
             report["commands"]["codex_fast_proxy_doctor"] = run_command(
-                [sys.executable, "-m", "codex_fast_proxy", "doctor"]
+                [sys.executable, "-m", "codex_fast_proxy", "doctor"],
+                env=command_env,
             )
         else:
             report["commands"]["codex_fast_proxy"] = {

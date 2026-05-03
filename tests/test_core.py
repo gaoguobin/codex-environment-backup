@@ -375,6 +375,32 @@ service_tier = "auto"
             with self.assertRaises(BackupError):
                 restore_backup(archive_path, root / "target")
 
+    def test_doctor_commands_scope_to_requested_codex_home(self) -> None:
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_home(root)
+            seen_envs: list[dict[str, str] | None] = []
+
+            def fake_which(command: str, path: str | None = None) -> str | None:
+                if command == "codex":
+                    return r"C:\\fake\\codex.exe"
+                return None
+
+            def fake_run(command, **kwargs):
+                seen_envs.append(kwargs.get("env"))
+                return subprocess.CompletedProcess(command, 0, "ok", "")
+
+            with (
+                mock.patch.object(core_module.shutil, "which", side_effect=fake_which),
+                mock.patch.object(core_module.subprocess, "run", side_effect=fake_run),
+                mock.patch.object(core_module.importlib.util, "find_spec", return_value=None),
+            ):
+                report = doctor_codex_environment(home, run_commands=True)
+
+            self.assertTrue(report["ok"], report)
+            self.assertGreaterEqual(len(seen_envs), 2)
+            self.assertTrue(all(env and env.get("CODEX_HOME") == str(home) for env in seen_envs))
+
 
 if __name__ == "__main__":
     unittest.main()
