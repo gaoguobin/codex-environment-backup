@@ -1,0 +1,380 @@
+from __future__ import annotations
+
+import io
+import json
+import sqlite3
+import subprocess
+import sys
+import tarfile
+import unittest
+import uuid
+from contextlib import contextmanager
+from pathlib import Path
+from shutil import rmtree
+from unittest import mock
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+import codex_environment_backup.core as core_module  # noqa: E402
+from codex_environment_backup.core import (  # noqa: E402
+    BackupError,
+    create_backup,
+    doctor_codex_environment,
+    list_backups,
+    restore_backup,
+)
+
+
+class CodexEnvironmentBackupTests(unittest.TestCase):
+    @contextmanager
+    def temp_root(self):
+        temp_root = ROOT / "test_tmp_runtime" / "codex-environment-backup-tests"
+        path = temp_root / f"case-{uuid.uuid4().hex}"
+        path.mkdir(parents=True, exist_ok=False)
+        try:
+            yield path
+        finally:
+            rmtree(path, ignore_errors=True)
+
+    def make_home(self, root: Path) -> Path:
+        home = root / "codex-home"
+        (home / "sessions").mkdir(parents=True)
+        (home / "archived_sessions").mkdir()
+        (home / "memories").mkdir()
+        (home / "skills").mkdir()
+        (home / "plugins").mkdir()
+        (home / "rules").mkdir()
+        (home / "automations").mkdir()
+        (home / ".sandbox").mkdir()
+        (home / ".sandbox-bin").mkdir()
+        (home / ".sandbox-secrets").mkdir()
+        (home / ".tmp").mkdir()
+        (home / "tmp").mkdir()
+        (home / "history.jsonl").write_text('{"event":"demo"}\n', encoding="utf-8")
+        (home / "hooks.json").write_text('{"hooks":[]}\n', encoding="utf-8")
+        (home / "config.toml").write_text(
+            """
+model_provider = "demo"
+
+[model_providers.demo]
+base_url = "https://example.invalid/v1"
+env_key = "DEMO_API_KEY"
+service_tier = "auto"
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+        (home / "auth.json").write_text('{"access_token":"FAKE-TOKEN-123"}\n', encoding="utf-8")
+
+        self.make_sqlite(home / "logs_2.sqlite", "logs")
+        self.make_sqlite(home / "state_5.sqlite", "state")
+        (home / "state_5.sqlite-wal").write_text("live wal", encoding="utf-8")
+        (home / "logs_2.sqlite-shm").write_text("live shm", encoding="utf-8")
+        return home
+
+    def make_sqlite(self, path: Path, table_name: str) -> None:
+        conn = sqlite3.connect(path)
+        try:
+            conn.execute(f"create table {table_name}(id integer primary key, value text)")
+            conn.execute(f"insert into {table_name}(value) values (?)", (f"{table_name}-row",))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def test_backup_creates_manifest_and_excludes_live_sqlite_sidecars(self) -> None:
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_home(root)
+            backup_root = root / "backups"
+
+            result = create_backup(
+                home,
+                backup_root=backup_root,
+                timestamp="codex-backup-test",
+                run_doctor_commands=False,
+            )
+
+            self.assertTrue(result["ok"], result)
+            self.assertTrue(Path(result["archive"]).exists())
+            self.assertTrue(Path(result["sha256_file"]).exists())
+            for helper_path in result["restore_kit"].values():
+                self.assertTrue(Path(helper_path).exists(), helper_path)
+            restore_ps1 = Path(result["restore_kit"]["restore_ps1"]).read_text(encoding="utf-8")
+            restore_sh = Path(result["restore_kit"]["restore_sh"]).read_text(encoding="utf-8")
+            self.assertIn("$LASTEXITCODE", restore_ps1)
+            self.assertIn("continue", restore_ps1)
+            self.assertIn("for candidate in python3 python", restore_sh)
+            self.assertIn('command -v "$candidate"', restore_sh)
+            with tarfile.open(result["archive"], "r:gz") as archive:
+                names = {Path(member.name).name for member in archive.getmembers()}
+            self.assertIn("RESTORE.md", names)
+            self.assertIn("RESTORE_INSTRUCTIONS.txt", names)
+            self.assertIn("restore-codex-environment.cmd", names)
+            self.assertIn("restore-codex-environment.ps1", names)
+            self.assertIn("restore-codex-environment.command", names)
+            self.assertIn("restore-codex-environment.sh", names)
+            self.assertIn("restore-standalone.py", names)
+            standalone = subprocess.run(
+                [
+                    sys.executable,
+                    result["restore_kit"]["restore_py"],
+                    "--backup-dir",
+                    result["backup_dir"],
+                    "--codex-home",
+                    str(root / "standalone-dry-run-target"),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(standalone.returncode, 0, standalone.stderr)
+            self.assertIn('"dry_run": true', standalone.stdout)
+
+            standalone_target = root / "standalone-restore-target"
+            standalone_target.mkdir()
+            (standalone_target / "config.toml").write_text("old config", encoding="utf-8")
+            standalone_prebacks = root / "standalone-prebacks"
+            standalone_apply = subprocess.run(
+                [
+                    sys.executable,
+                    result["restore_kit"]["restore_py"],
+                    "--backup-dir",
+                    result["backup_dir"],
+                    "--codex-home",
+                    str(standalone_target),
+                    "--backup-root",
+                    str(standalone_prebacks),
+                    "--apply",
+                    "--confirm",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(standalone_apply.returncode, 0, standalone_apply.stderr)
+            pre_restore_dirs = sorted(standalone_prebacks.glob("pre-restore-codex-backup-*"))
+            self.assertTrue(pre_restore_dirs, standalone_apply.stdout)
+            pre_restore_dir = pre_restore_dirs[0]
+            for helper_name in (
+                "RESTORE.md",
+                "RESTORE_INSTRUCTIONS.txt",
+                "restore-codex-environment.cmd",
+                "restore-codex-environment.ps1",
+                "restore-codex-environment.command",
+                "restore-codex-environment.sh",
+                "restore-standalone.py",
+            ):
+                self.assertTrue((pre_restore_dir / helper_name).exists(), helper_name)
+
+            manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+            paths = {entry["relative_path"] for entry in manifest["entries"]}
+            self.assertIn("config.toml", paths)
+            self.assertIn("hooks.json", paths)
+            self.assertIn("history.jsonl", paths)
+            self.assertIn("logs_2.sqlite", paths)
+            self.assertIn("state_5.sqlite", paths)
+            self.assertNotIn(".sandbox-secrets", "".join(paths))
+            self.assertFalse(any(path.endswith("-wal") or path.endswith("-shm") for path in paths))
+            self.assertEqual(manifest["counts"]["sqlite_databases"], 2)
+
+            checks = json.loads(Path(result["sqlite_integrity"]).read_text(encoding="utf-8"))
+            self.assertTrue(all(check["ok"] for check in checks), checks)
+
+            report = doctor_codex_environment(home, run_commands=False)
+            report_json = json.dumps(report)
+            self.assertNotIn("FAKE-TOKEN-123", report_json)
+
+    def test_backup_records_walk_errors_and_reports_not_ok(self) -> None:
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_home(root)
+            backup_root = root / "backups"
+            original_walk = core_module.os.walk
+
+            def fake_walk(top, *args, **kwargs):
+                top_path = Path(top)
+                if top_path == home:
+                    yield str(home), ["sessions"], ["config.toml"]
+                    onerror = kwargs.get("onerror")
+                    if onerror is not None:
+                        onerror(PermissionError(13, "Access denied", str(home / "sessions")))
+                    return
+                yield from original_walk(top, *args, **kwargs)
+
+            with mock.patch.object(core_module.os, "walk", side_effect=fake_walk):
+                result = create_backup(
+                    home,
+                    backup_root=backup_root,
+                    timestamp="codex-backup-walk-error",
+                    run_doctor_commands=False,
+                )
+
+            self.assertFalse(result["ok"], result)
+            self.assertEqual(result["counts"]["errors"], 1)
+            self.assertEqual(result["errors"][0]["method"], "walk")
+            self.assertEqual(result["errors"][0]["relative_path"], "sessions")
+            manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+            self.assertEqual(manifest["counts"]["errors"], 1)
+            self.assertTrue(Path(result["archive"]).exists())
+
+    def test_restore_dry_run_and_apply_overlay(self) -> None:
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            source_home = self.make_home(root)
+            backup_result = create_backup(
+                source_home,
+                backup_root=root / "backups",
+                timestamp="codex-backup-test",
+                run_doctor_commands=False,
+            )
+            archive = Path(backup_result["archive"])
+
+            dry_run_target = root / "dry-run-home"
+            dry_run = restore_backup(archive, dry_run_target)
+            self.assertTrue(dry_run["dry_run"])
+            self.assertFalse(dry_run_target.exists())
+
+            target_home = root / "restored-home"
+            (target_home / ".sandbox-secrets").mkdir(parents=True)
+            (target_home / ".sandbox-secrets" / "keep.txt").write_text("keep", encoding="utf-8")
+            (target_home / "config.toml").write_text("old config", encoding="utf-8")
+            (target_home / "old.txt").write_text("old", encoding="utf-8")
+
+            restore_result = restore_backup(
+                archive,
+                target_home,
+                backup_root=root / "prebacks",
+                apply=True,
+                confirm=True,
+            )
+
+            self.assertTrue(restore_result["ok"], restore_result)
+            self.assertTrue(restore_result["pre_restore_backup"])
+            self.assertEqual(
+                (target_home / "config.toml").read_text(encoding="utf-8"),
+                (source_home / "config.toml").read_text(encoding="utf-8"),
+            )
+            self.assertTrue((target_home / ".sandbox-secrets" / "keep.txt").exists())
+            self.assertTrue((target_home / "old.txt").exists())
+            self.assertTrue(restore_result["restore"]["restored_files"] >= 1)
+
+    def test_restore_aborts_when_pre_restore_backup_is_incomplete(self) -> None:
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            source_home = self.make_home(root)
+            backup_result = create_backup(
+                source_home,
+                backup_root=root / "backups",
+                timestamp="codex-backup-test",
+                run_doctor_commands=False,
+            )
+            archive = Path(backup_result["archive"])
+
+            target_home = root / "target-home"
+            target_home.mkdir()
+            (target_home / "config.toml").write_text("old config", encoding="utf-8")
+            self.make_sqlite(target_home / "broken.sqlite", "broken")
+
+            original_sqlite_backup = core_module.backup_sqlite_database
+
+            def fail_for_broken_sqlite(source: Path, destination: Path) -> None:
+                if source.name == "broken.sqlite":
+                    raise RuntimeError("simulated sqlite backup failure")
+                original_sqlite_backup(source, destination)
+
+            with mock.patch.object(
+                core_module,
+                "backup_sqlite_database",
+                side_effect=fail_for_broken_sqlite,
+            ):
+                restore_result = restore_backup(
+                    archive,
+                    target_home,
+                    backup_root=root / "prebacks",
+                    apply=True,
+                    confirm=True,
+                )
+
+            self.assertFalse(restore_result["ok"], restore_result)
+            self.assertFalse(restore_result["pre_restore_backup"]["ok"])
+            self.assertEqual(restore_result["restore"]["restored_files"], 0)
+            self.assertEqual(
+                restore_result["restore"]["errors"][0]["error"],
+                "pre_restore_backup_failed",
+            )
+            self.assertEqual(
+                (target_home / "config.toml").read_text(encoding="utf-8"),
+                "old config",
+            )
+
+    def test_list_backups_includes_restore_backups(self) -> None:
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            source_home = self.make_home(root)
+            backup_root = root / "backups"
+            backup_result = create_backup(
+                source_home,
+                backup_root=backup_root,
+                timestamp="codex-backup-test",
+                run_doctor_commands=False,
+            )
+            archive = Path(backup_result["archive"])
+            target_home = root / "restored-home"
+            target_home.mkdir()
+            (target_home / "config.toml").write_text("old config", encoding="utf-8")
+            restore_backup(
+                archive,
+                target_home,
+                backup_root=backup_root,
+                apply=True,
+                confirm=True,
+            )
+
+            listing = list_backups(backup_root)
+            backup_dirs = {Path(item["backup_dir"]).name for item in listing["backups"]}
+            self.assertIn("codex-backup-test", backup_dirs)
+            self.assertTrue(any(name.startswith("pre-restore-codex-backup-") for name in backup_dirs))
+
+    def test_restore_apply_requires_confirmation(self) -> None:
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            source_home = self.make_home(root)
+            backup_result = create_backup(
+                source_home,
+                backup_root=root / "backups",
+                timestamp="codex-backup-test",
+                run_doctor_commands=False,
+            )
+            archive = Path(backup_result["archive"])
+            with self.assertRaises(BackupError):
+                restore_backup(archive, root / "target", apply=True, confirm=False)
+
+    def test_restore_rejects_tar_symlink_members(self) -> None:
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            archive_path = root / "malicious.tar"
+            manifest = b'{"schema_version":1,"counts":{"files":0}}\n'
+
+            with tarfile.open(archive_path, "w") as archive:
+                manifest_info = tarfile.TarInfo("malicious-backup/manifest.json")
+                manifest_info.size = len(manifest)
+                archive.addfile(manifest_info, io.BytesIO(manifest))
+
+                files_info = tarfile.TarInfo("malicious-backup/files")
+                files_info.type = tarfile.DIRTYPE
+                archive.addfile(files_info)
+
+                link_info = tarfile.TarInfo("malicious-backup/files/link")
+                link_info.type = tarfile.SYMTYPE
+                link_info.linkname = "../outside"
+                archive.addfile(link_info)
+
+            with self.assertRaises(BackupError):
+                restore_backup(archive_path, root / "target")
+
+
+if __name__ == "__main__":
+    unittest.main()

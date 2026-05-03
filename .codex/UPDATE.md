@@ -1,0 +1,117 @@
+# codex-environment-backup update for Codex
+
+Use these instructions when an engineer asks Codex to update the Codex environment backup skill and CLI.
+
+## One-paste prompt for engineers
+
+```text
+Fetch and follow instructions from https://raw.githubusercontent.com/gaoguobin/codex-environment-backup/main/.codex/UPDATE.md
+```
+
+## Update steps
+
+This file is for Codex to execute after the user asks for update in natural language or pastes the one-paste prompt. Do not ask the user to manually type the command block unless Codex itself is unavailable.
+
+If the Codex environment uses sandbox or approval controls, request approval/escalation for the update block because it fetches from GitHub, installs a Python package, may write under `~/.codex`, and may create a link under `~/.agents`.
+
+If any command fails because of network, permissions, sandbox write limits, or link creation, do not try unrelated workarounds. Ask for approval and rerun the same intended update step.
+
+### Windows PowerShell
+
+Run this PowerShell block exactly:
+
+```powershell
+$repoRoot = Join-Path $HOME '.codex\codex-environment-backup'
+$skillNamespace = Join-Path $HOME '.agents\skills\codex-environment-backup'
+$pythonCmd = $null
+
+foreach ($candidate in @('python3', 'python')) {
+    if (-not (Get-Command $candidate -ErrorAction SilentlyContinue)) {
+        continue
+    }
+    try {
+        $versionText = & $candidate -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            continue
+        }
+        $version = [version]($versionText | Select-Object -First 1)
+        if ($version -ge [version]'3.11') {
+            $pythonCmd = $candidate
+            break
+        }
+    } catch {
+        continue
+    }
+}
+
+if (-not $pythonCmd) {
+    throw 'Python 3.11+ is required before updating codex-environment-backup.'
+}
+
+if (-not (Test-Path $repoRoot)) {
+    throw 'codex-environment-backup is not installed. Follow INSTALL.md first.'
+}
+
+git -C $repoRoot pull --ff-only
+& $pythonCmd -m pip install --user -e $repoRoot
+
+if (-not (Test-Path $skillNamespace)) {
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $skillNamespace) | Out-Null
+    cmd /d /c "mklink /J `"$skillNamespace`" `"$repoRoot\skills`""
+}
+
+& $pythonCmd -m codex_environment_backup doctor
+```
+
+### macOS or Linux shell
+
+Run this shell block exactly:
+
+```bash
+set -euo pipefail
+
+repo_root="$HOME/.codex/codex-environment-backup"
+skill_namespace="$HOME/.agents/skills/codex-environment-backup"
+python_cmd="${PYTHON:-}"
+
+if [ -n "$python_cmd" ]; then
+  "$python_cmd" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1 || {
+    echo "Python 3.11+ is required before updating codex-environment-backup." >&2
+    exit 1
+  }
+else
+  for candidate in python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
+      python_cmd="$candidate"
+      break
+    fi
+  done
+  if [ -z "$python_cmd" ]; then
+    echo "Python 3.11+ is required before updating codex-environment-backup." >&2
+    exit 1
+  fi
+fi
+
+if [ ! -d "$repo_root" ]; then
+  echo "codex-environment-backup is not installed. Follow INSTALL.md first." >&2
+  exit 1
+fi
+
+git -C "$repo_root" pull --ff-only
+"$python_cmd" -m pip install --user -e "$repo_root"
+
+if [ ! -e "$skill_namespace" ]; then
+  mkdir -p "$(dirname "$skill_namespace")"
+  ln -s "$repo_root/skills" "$skill_namespace"
+fi
+
+"$python_cmd" -m codex_environment_backup doctor
+```
+
+Report the final doctor JSON. If skill files changed or the skill link was newly created, explicitly tell the user in the user's language:
+
+```text
+Please restart Codex App and return to this conversation, or open a new CLI session, so Codex can rescan ~/.agents/skills.
+
+请重启 Codex App 并回到这个对话，或新开 CLI 实例，让它重新扫描 ~/.agents/skills。
+```
