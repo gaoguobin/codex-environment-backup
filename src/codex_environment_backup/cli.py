@@ -47,6 +47,11 @@ def build_parser() -> argparse.ArgumentParser:
         dest="confirm",
         help="Required with --apply.",
     )
+    restore.add_argument(
+        "--run-post-restore-commands",
+        action="store_true",
+        help="Run external post-restore doctor commands after apply. Default is structural checks only.",
+    )
 
     doctor = subparsers.add_parser("doctor", help="Inspect Codex environment health")
     doctor.add_argument("--codex-home", help="Codex home path. Defaults to CODEX_HOME or ~/.codex.")
@@ -85,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
                 apply=args.apply,
                 confirm=args.confirm,
                 archive_format=args.format,
+                run_post_restore_commands=args.run_post_restore_commands,
             )
             emit_json(result)
             return 0 if result.get("ok") else 1

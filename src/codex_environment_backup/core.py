@@ -128,6 +128,9 @@ def run_command(
     command: list[str],
     timeout: int = 20,
     env: dict[str, str] | None = None,
+    *,
+    include_output: bool = True,
+    json_summary: bool = False,
 ) -> dict[str, Any]:
     path = env.get("PATH") if env is not None else None
     if shutil.which(command[0], path=path) is None and Path(command[0]).name == command[0]:
@@ -159,12 +162,124 @@ def run_command(
             "status": "error",
             "error": str(exc),
         }
-    return {
+    result: dict[str, Any] = {
         "command": command,
         "status": "ok" if completed.returncode == 0 else "failed",
         "returncode": completed.returncode,
-        "stdout": redact_text(completed.stdout.strip()),
-        "stderr": redact_text(completed.stderr.strip()),
+    }
+    stdout = completed.stdout.strip()
+    stderr = completed.stderr.strip()
+    if json_summary:
+        result["stdout_summary"] = summarize_json_output(stdout)
+        result["output_redacted"] = not include_output
+    if include_output:
+        result["stdout"] = redact_text(stdout)
+        result["stderr"] = redact_text(stderr)
+    else:
+        result["stdout_bytes"] = len(stdout.encode("utf-8"))
+        result["stderr_bytes"] = len(stderr.encode("utf-8"))
+    return result
+
+
+def summarize_json_output(text: str) -> dict[str, Any]:
+    if not text:
+        return {"parse_status": "empty"}
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return {"parse_status": "failed", "stdout_present": True}
+    if not isinstance(data, dict):
+        return {"parse_status": "ok", "json_type": type(data).__name__}
+
+    summary: dict[str, Any] = {"parse_status": "ok"}
+    for key in (
+        "ok",
+        "status",
+        "installed",
+        "running",
+        "healthy",
+        "runtime_matches",
+        "needs_restart",
+        "pending_restart",
+        "config_matches",
+        "startup_hook",
+    ):
+        if key in data and isinstance(data[key], (bool, str, int, float, type(None))):
+            summary[key] = data[key]
+
+    for key in (
+        "provider",
+        "base_url",
+        "upstream_base",
+        "config_base_url",
+        "log",
+        "stdout",
+        "stderr",
+    ):
+        if key in data:
+            summary[f"{key}_present"] = data[key] is not None
+
+    health = data.get("health")
+    if isinstance(health, dict):
+        summary["health"] = {
+            "ok": health.get("ok"),
+            "service_tier_present": health.get("service_tier") is not None,
+            "upstream_base_present": health.get("upstream_base") is not None,
+            "runtime_id_present": health.get("runtime_id") is not None,
+        }
+
+    checks = data.get("checks")
+    if isinstance(checks, list):
+        safe_checks = []
+        for check in checks:
+            if isinstance(check, dict):
+                safe_checks.append(
+                    {
+                        "name": str(check.get("name", "")),
+                        "ok": check.get("ok"),
+                    }
+                )
+        summary["checks"] = safe_checks
+    return summary
+
+
+def summarize_command_results(commands: dict[str, dict[str, Any]], *, run: bool) -> dict[str, Any]:
+    failed: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    if not run:
+        return {
+            "run": False,
+            "ok": True,
+            "total": 0,
+            "failed": failed,
+            "skipped": [{"name": "external_commands", "reason": "disabled"}],
+        }
+
+    for name, result in sorted(commands.items()):
+        status = result.get("status", "unknown")
+        if status == "skipped":
+            skipped.append(
+                {
+                    "name": name,
+                    "reason": result.get("reason", "skipped"),
+                }
+            )
+            continue
+        if status != "ok":
+            failed.append(
+                {
+                    "name": name,
+                    "status": status,
+                    "returncode": result.get("returncode"),
+                    "reason": result.get("reason") or result.get("error"),
+                }
+            )
+    return {
+        "run": True,
+        "ok": not failed,
+        "total": len(commands),
+        "failed": failed,
+        "skipped": skipped,
     }
 
 
@@ -241,8 +356,10 @@ def doctor_codex_environment(
     run_commands: bool = True,
 ) -> dict[str, Any]:
     home = resolve_codex_home(codex_home)
+    core_ok = home.exists() and home.is_dir()
     report: dict[str, Any] = {
-        "ok": home.exists() and home.is_dir(),
+        "ok": core_ok,
+        "core_ok": core_ok,
         "created_at": utc_now_iso(),
         "codex_home": str(home),
         "platform": {
@@ -280,6 +397,14 @@ def doctor_codex_environment(
                 "bytes": target.stat().st_size if target.exists() else 0,
             }
 
+    path_scan_errors = [
+        {"path": name, **error}
+        for name, info in report["paths"].items()
+        for error in info.get("errors", [])
+    ]
+    report["path_scan_ok"] = not path_scan_errors
+    report["path_scan_errors"] = path_scan_errors
+
     if run_commands:
         command_env = os.environ.copy()
         command_env["CODEX_HOME"] = str(home)
@@ -293,16 +418,29 @@ def doctor_codex_environment(
             report["commands"]["codex_fast_proxy_status"] = run_command(
                 [sys.executable, "-m", "codex_fast_proxy", "status"],
                 env=command_env,
+                include_output=False,
+                json_summary=True,
             )
             report["commands"]["codex_fast_proxy_doctor"] = run_command(
                 [sys.executable, "-m", "codex_fast_proxy", "doctor"],
                 env=command_env,
+                include_output=False,
+                json_summary=True,
             )
         else:
             report["commands"]["codex_fast_proxy"] = {
                 "status": "skipped",
                 "reason": "module_not_available",
             }
+    command_summary = summarize_command_results(report["commands"], run=run_commands)
+    report["command_summary"] = command_summary
+    report["command_ok"] = command_summary["ok"]
+    report["checks"] = {
+        "core": report["core_ok"],
+        "paths": report["path_scan_ok"],
+        "commands": report["command_ok"],
+    }
+    report["ok"] = all(report["checks"].values())
     return report
 
 
@@ -383,6 +521,9 @@ def write_environment_snapshot(path: Path, doctor_report: dict[str, Any]) -> Non
         f"Codex home: {doctor_report['codex_home']}",
         f"Platform: {doctor_report['platform']['system']} {doctor_report['platform']['release']} {doctor_report['platform']['machine']}",
         f"Python: {doctor_report['platform']['python']}",
+        f"Core ok: {doctor_report.get('core_ok')}",
+        f"Path scan ok: {doctor_report.get('path_scan_ok')}",
+        f"Command ok: {doctor_report.get('command_ok')}",
         "",
         SENSITIVE_NOTE,
         "",
@@ -1283,6 +1424,7 @@ def restore_backup(
     apply: bool = False,
     confirm: bool = False,
     archive_format: str = "tar.gz",
+    run_post_restore_commands: bool = False,
 ) -> dict[str, Any]:
     home = resolve_codex_home(codex_home)
     root = Path(backup_root).expanduser().resolve() if backup_root else default_backup_root()
@@ -1363,16 +1505,88 @@ def restore_backup(
             home.mkdir(parents=True, exist_ok=True)
 
         copy_result = copy_backup_files(backup_dir, home)
-        post_doctor = doctor_codex_environment(home, run_commands=True)
+        post_doctor = doctor_codex_environment(home, run_commands=run_post_restore_commands)
         result.update(
             {
                 "pre_restore_backup": pre_restore,
                 "restore": copy_result,
                 "post_restore_doctor": post_doctor,
+                "post_restore_doctor_mode": "full"
+                if run_post_restore_commands
+                else "structural",
+                "post_restore_next_steps": (
+                    "Reopen Codex or start a fresh CLI session, then run a full doctor check "
+                    "against the restored CODEX_HOME."
+                    if not run_post_restore_commands
+                    else None
+                ),
                 "ok": not copy_result["errors"] and post_doctor["ok"],
             }
         )
         return result
+
+
+def count_files_under(path: Path) -> int:
+    return sum(1 for candidate in path.rglob("*") if candidate.is_file())
+
+
+def backup_list_item(manifest: Path, data: dict[str, Any]) -> dict[str, Any]:
+    counts = data.get("counts") if isinstance(data.get("counts"), dict) else {}
+    entries = data.get("entries") if isinstance(data.get("entries"), list) else []
+    schema_version = data.get("schema_version")
+    schema_label = schema_version if schema_version is not None else "legacy"
+    files_dir = manifest.parent / "files"
+
+    files = counts.get("files")
+    if files is None and entries:
+        files = len(entries)
+    if files is None and files_dir.is_dir():
+        files = count_files_under(files_dir)
+    if files is None:
+        files = count_files_under(manifest.parent)
+
+    sqlite_databases = counts.get("sqlite_databases")
+    if sqlite_databases is None and entries:
+        sqlite_databases = sum(1 for entry in entries if entry.get("method") == "sqlite_backup")
+    if sqlite_databases is None and isinstance(data.get("sqlite_online_backup"), list):
+        sqlite_databases = len(data["sqlite_online_backup"])
+
+    errors = counts.get("errors")
+    if errors is None and isinstance(data.get("errors"), list):
+        errors = len(data["errors"])
+    if errors is None:
+        errors = 0
+
+    status = "ok" if schema_version == 1 else "legacy_manifest"
+    archive_candidates = [
+        manifest.parent.with_name(f"{manifest.parent.name}.tar.gz"),
+        manifest.parent.with_name(f"{manifest.parent.name}.zip"),
+    ]
+    item: dict[str, Any] = {
+        "backup_dir": str(manifest.parent),
+        "status": status,
+        "schema_version": schema_label,
+        "created_at": data.get("created_at") or data.get("generated_at"),
+        "files": files,
+        "sqlite_databases": sqlite_databases,
+        "errors": errors,
+        "archives": [str(path) for path in archive_candidates if path.exists()],
+    }
+    if status == "legacy_manifest":
+        item["legacy_summary"] = {
+            "generated_at": data.get("generated_at"),
+            "root_files": len(data.get("included_root_files", []))
+            if isinstance(data.get("included_root_files"), list)
+            else None,
+            "directories": len(data.get("included_directories", []))
+            if isinstance(data.get("included_directories"), list)
+            else None,
+            "sqlite_online_backup": len(data.get("sqlite_online_backup", []))
+            if isinstance(data.get("sqlite_online_backup"), list)
+            else None,
+            "counts_estimated": True,
+        }
+    return item
 
 
 def list_backups(
@@ -1394,18 +1608,5 @@ def list_backups(
                 }
             )
             continue
-        archive_candidates = [
-            manifest.parent.with_name(f"{manifest.parent.name}.tar.gz"),
-            manifest.parent.with_name(f"{manifest.parent.name}.zip"),
-        ]
-        items.append(
-            {
-                "backup_dir": str(manifest.parent),
-                "created_at": data.get("created_at"),
-                "files": data.get("counts", {}).get("files"),
-                "sqlite_databases": data.get("counts", {}).get("sqlite_databases"),
-                "errors": data.get("counts", {}).get("errors"),
-                "archives": [str(path) for path in archive_candidates if path.exists()],
-            }
-        )
+        items.append(backup_list_item(manifest, data))
     return {"ok": True, "backup_root": str(root), "backups": items}

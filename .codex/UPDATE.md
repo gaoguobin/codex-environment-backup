@@ -60,7 +60,7 @@ if (-not (Test-Path $skillNamespace)) {
     cmd /d /c "mklink /J `"$skillNamespace`" `"$repoRoot\skills`""
 }
 
-& $pythonCmd -m codex_environment_backup doctor
+& $pythonCmd -m codex_environment_backup doctor --no-run-commands
 ```
 
 ### macOS or Linux shell
@@ -105,10 +105,10 @@ if [ ! -e "$skill_namespace" ]; then
   ln -s "$repo_root/skills" "$skill_namespace"
 fi
 
-"$python_cmd" -m codex_environment_backup doctor
+"$python_cmd" -m codex_environment_backup doctor --no-run-commands
 ```
 
-Report the final doctor JSON. If skill files changed or the skill link was newly created, explicitly tell the user in the user's language:
+Report the final structural doctor JSON. This update-time doctor intentionally skips external `codex` commands to avoid sandbox noise before restart. If skill files changed or the skill link was newly created, explicitly tell the user in the user's language:
 
 ```text
 Please restart Codex App and return to this conversation, or open a new CLI session, so Codex can rescan ~/.agents/skills.

@@ -147,8 +147,9 @@ codex-backup-YYYYMMDD-HHMMSS/
 - Windows uses junctions for skill installation; macOS and Linux use symlinks.
 
 `codex-fast-proxy` is optional. If `python -m codex_fast_proxy` is available in
-the current Python environment, `doctor` records `status` and `doctor` output.
-If it is not available, the integration is skipped.
+the current Python environment, `doctor` records safe `status` / `doctor`
+summaries without printing provider URLs, local state paths, or full integration
+stdout. If it is not available, the integration is skipped.
 
 ## Update
 
@@ -220,7 +221,10 @@ On systems where `python3` is the Python 3 command, replace `python` with
 `python3`.
 
 Before an apply restore, the tool creates a pre-restore backup of the current
-`CODEX_HOME`.
+`CODEX_HOME`. After apply, the default post-restore check is structural only so
+external `codex` commands do not recreate runtime directories in the restored
+environment. Advanced users can add `--run-post-restore-commands` after they
+intend to run a full command-level doctor immediately.
 
 ## Development
 
@@ -289,6 +293,7 @@ Codex 会先跑体检，然后生成本地备份目录、压缩包、SHA256、ma
 
 恢复默认先 dry-run，只汇报会恢复什么。真正覆盖 `CODEX_HOME` 前，工具会先创建 pre-restore backup，并且
 必须有明确确认。
+apply 后默认只做结构体检；如果你确实要立刻跑完整命令体检，可以加 `--run-post-restore-commands`。
 
 有一个硬边界不能假装不存在：如果要恢复的正是当前 Codex App 正在使用的 `CODEX_HOME`，应先关闭
 Codex App，再执行覆盖恢复。为了照顾不懂命令行的用户，每个备份都会带恢复套件：
@@ -359,7 +364,8 @@ Fetch and follow instructions from https://raw.githubusercontent.com/gaoguobin/c
 - `*.sqlite` 使用 Python `sqlite3` online backup API 复制，并执行 `PRAGMA integrity_check`。
 - 第三方 provider 配置是一等公民：`config.toml`、`hooks.json`、`model_provider`、`model_providers`、
   `base_url`、`env_key`、`service_tier` 等都会作为文件备份，但不会泄露内容到日志。
-- `codex-fast-proxy` 只是可选集成；检测到可用时记录 `status` / `doctor`，不可用时记为 skipped，不会失败。
+- `codex-fast-proxy` 只是可选集成；检测到可用时记录安全摘要，不打印 provider URL、本机状态路径或完整 stdout；
+  不可用时记为 skipped，不会失败。
 
 ### 高级 CLI
 
@@ -372,6 +378,9 @@ python -m codex_environment_backup backup
 python -m codex_environment_backup list-backups
 python -m codex_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz
 python -m codex_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz --apply --i-understand-this-restores-sensitive-codex-state
+python -m codex_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz --apply --i-understand-this-restores-sensitive-codex-state --run-post-restore-commands
 ```
 
 如果系统里 `python3` 才是 Python 3，请把上面的 `python` 换成 `python3`。
+apply 恢复后的默认体检只做结构检查，避免外部 `codex` 命令在恢复目标里重新生成运行期目录。
+高级用户确实要立刻跑完整命令体检时，可以额外加 `--run-post-restore-commands`。

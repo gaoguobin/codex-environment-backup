@@ -253,6 +253,8 @@ service_tier = "auto"
 
             self.assertTrue(restore_result["ok"], restore_result)
             self.assertTrue(restore_result["pre_restore_backup"])
+            self.assertEqual(restore_result["post_restore_doctor_mode"], "structural")
+            self.assertFalse(restore_result["post_restore_doctor"]["command_summary"]["run"])
             self.assertEqual(
                 (target_home / "config.toml").read_text(encoding="utf-8"),
                 (source_home / "config.toml").read_text(encoding="utf-8"),
@@ -338,6 +340,37 @@ service_tier = "auto"
             self.assertIn("codex-backup-test", backup_dirs)
             self.assertTrue(any(name.startswith("pre-restore-codex-backup-") for name in backup_dirs))
 
+    def test_list_backups_summarizes_legacy_manifest(self) -> None:
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            backup_root = root / "backups"
+            legacy = backup_root / "codex-backup-legacy"
+            legacy.mkdir(parents=True)
+            (legacy / "config.toml").write_text("model = 'demo'\n", encoding="utf-8")
+            (legacy / "logs_2.sqlite").write_text("placeholder", encoding="utf-8")
+            (legacy / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-05-03T12:44:27+08:00",
+                        "included_root_files": ["config.toml"],
+                        "included_directories": ["sessions"],
+                        "sqlite_online_backup": ["logs_2.sqlite"],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            listing = list_backups(backup_root)
+            item = listing["backups"][0]
+
+            self.assertEqual(item["status"], "legacy_manifest")
+            self.assertEqual(item["created_at"], "2026-05-03T12:44:27+08:00")
+            self.assertGreaterEqual(item["files"], 2)
+            self.assertEqual(item["sqlite_databases"], 1)
+            self.assertEqual(item["errors"], 0)
+            self.assertEqual(item["legacy_summary"]["root_files"], 1)
+
     def test_restore_apply_requires_confirmation(self) -> None:
         with self.temp_root() as temp_dir:
             root = Path(temp_dir)
@@ -400,6 +433,79 @@ service_tier = "auto"
             self.assertTrue(report["ok"], report)
             self.assertGreaterEqual(len(seen_envs), 2)
             self.assertTrue(all(env and env.get("CODEX_HOME") == str(home) for env in seen_envs))
+
+    def test_doctor_command_failures_are_visible(self) -> None:
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_home(root)
+
+            def fake_which(command: str, path: str | None = None) -> str | None:
+                if command == "codex":
+                    return r"C:\\fake\\codex.exe"
+                return None
+
+            def fake_run(command, **kwargs):
+                if command == ["codex", "mcp", "list"]:
+                    return subprocess.CompletedProcess(command, 1, "", "access denied")
+                return subprocess.CompletedProcess(command, 0, "ok", "")
+
+            with (
+                mock.patch.object(core_module.shutil, "which", side_effect=fake_which),
+                mock.patch.object(core_module.subprocess, "run", side_effect=fake_run),
+                mock.patch.object(core_module.importlib.util, "find_spec", return_value=None),
+            ):
+                report = doctor_codex_environment(home, run_commands=True)
+
+            self.assertFalse(report["ok"], report)
+            self.assertTrue(report["core_ok"])
+            self.assertTrue(report["path_scan_ok"])
+            self.assertFalse(report["command_ok"])
+            failed_names = {item["name"] for item in report["command_summary"]["failed"]}
+            self.assertIn("codex_mcp_list", failed_names)
+
+    def test_fast_proxy_doctor_output_is_summarized(self) -> None:
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_home(root)
+
+            def fake_which(command: str, path: str | None = None) -> str | None:
+                if command == "codex":
+                    return r"C:\\fake\\codex.exe"
+                return None
+
+            def fake_run(command, **kwargs):
+                if "codex_fast_proxy" in command:
+                    payload = {
+                        "ok": True,
+                        "status": "running",
+                        "provider": "private-provider",
+                        "base_url": "https://private.example/v1",
+                        "log": r"C:\\Users\\example\\.codex\\state\\fast_proxy.jsonl",
+                        "health": {
+                            "ok": True,
+                            "service_tier": "priority",
+                            "upstream_base": "https://private.example/v1",
+                            "runtime_id": "secret-runtime-id",
+                        },
+                    }
+                    return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
+                return subprocess.CompletedProcess(command, 0, "ok", "")
+
+            with (
+                mock.patch.object(core_module.shutil, "which", side_effect=fake_which),
+                mock.patch.object(core_module.subprocess, "run", side_effect=fake_run),
+                mock.patch.object(core_module.importlib.util, "find_spec", return_value=object()),
+            ):
+                report = doctor_codex_environment(home, run_commands=True)
+
+            encoded = json.dumps(report)
+            self.assertNotIn("private-provider", encoded)
+            self.assertNotIn("https://private.example/v1", encoded)
+            self.assertNotIn("secret-runtime-id", encoded)
+            status_result = report["commands"]["codex_fast_proxy_status"]
+            self.assertNotIn("stdout", status_result)
+            self.assertTrue(status_result["stdout_summary"]["provider_present"])
+            self.assertTrue(status_result["stdout_summary"]["base_url_present"])
 
 
 if __name__ == "__main__":

@@ -28,7 +28,9 @@ class DocumentationShapeTests(unittest.TestCase):
 
         self.assertIn("请重启 Codex App 并回到这个对话", install)
         self.assertIn("备份当前 Codex 环境", install)
+        self.assertIn("doctor --no-run-commands", install)
         self.assertIn("请重启 Codex App 并回到这个对话", update)
+        self.assertIn("doctor --no-run-commands", update)
         self.assertIn("让它从 skill 列表中移除 codex-environment-backup", uninstall)
 
     def test_python_discovery_keeps_candidate_fallbacks(self) -> None:

@@ -45,6 +45,8 @@ For natural language backup requests:
 3. Report `ok`, `backup_dir`, `archive`, `archive_sha256`, `sha256_file`, and `counts`.
 4. Remind the user that the archive is local and sensitive.
 
+For backup requests, `core_ok=false` or `path_scan_ok=false` blocks backup. `command_ok=false` is a health warning, not a backup blocker; report the failed command summary and continue unless the user only asked for a health check.
+
 Do not ask the user to run commands for normal backup requests. Ask for approval only when sandbox, filesystem, network, or install policy requires it.
 
 ## Restore workflow
@@ -74,6 +76,7 @@ When apply is safe to run from the current context, run:
 ```
 
 The CLI creates a pre-restore backup before applying. Restore overlays backed-up files and does not prune excluded paths.
+The default post-restore doctor is structural only. Do not add `--run-post-restore-commands` unless the user explicitly wants command-level validation immediately, because external `codex` commands can recreate runtime directories in the target environment.
 
 ## Doctor and listing workflows
 
@@ -89,7 +92,7 @@ For listing backups:
 <python-cmd> -m codex_environment_backup list-backups
 ```
 
-Report presence and counts for config, hooks, sessions, archived sessions, memories, skills, plugins, rules, automations, and optional `codex-fast-proxy` status. If `codex_fast_proxy` is not installed, report it as skipped rather than failed.
+Report `core_ok`, `path_scan_ok`, `command_ok`, command failures, and presence/counts for config, hooks, sessions, archived sessions, memories, skills, plugins, rules, automations, and optional `codex-fast-proxy` status. If `codex_fast_proxy` is not installed, report it as skipped rather than failed. Do not print provider URLs, local state paths, or full integration stdout from optional integrations.
 
 ## Install, update, uninstall
 
@@ -118,7 +121,8 @@ Initial versions are manual-trigger only. If the user asks for periodic backups,
 ## Result handling
 
 - Treat CLI JSON as authoritative.
-- If `ok` is false, stop and report the error or failing count.
+- For health-check-only requests, if `ok` is false, stop and report `core_ok`, `path_scan_ok`, `command_ok`, and the failed command summary.
+- For backup requests, continue when only `command_ok` is false; stop when `core_ok` or `path_scan_ok` is false.
 - Prefer exact paths from JSON output.
-- Do not infer that restore succeeded from natural language alone; use the post-restore doctor report.
-- For install/update/uninstall, report the executed instruction source and the final doctor/status result.
+- Do not infer that restore succeeded from natural language alone; use the restore JSON, restored file count, errors list, and post-restore structural doctor report.
+- For install/update/uninstall, report the executed instruction source and the final structural doctor/status result.

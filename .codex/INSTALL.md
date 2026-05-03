@@ -75,7 +75,7 @@ New-Item -ItemType Directory -Force -Path $skillsRoot | Out-Null
 git clone https://github.com/gaoguobin/codex-environment-backup.git $repoRoot
 & $pythonCmd -m pip install --user -e $repoRoot
 cmd /d /c "mklink /J `"$skillNamespace`" `"$repoRoot\skills`""
-& $pythonCmd -m codex_environment_backup doctor
+& $pythonCmd -m codex_environment_backup doctor --no-run-commands
 ```
 
 ### macOS or Linux shell
@@ -123,12 +123,12 @@ mkdir -p "$skills_root"
 git clone https://github.com/gaoguobin/codex-environment-backup.git "$repo_root"
 "$python_cmd" -m pip install --user -e "$repo_root"
 ln -s "$repo_root/skills" "$skill_namespace"
-"$python_cmd" -m codex_environment_backup doctor
+"$python_cmd" -m codex_environment_backup doctor --no-run-commands
 ```
 
 ## After install
 
-Report the doctor JSON from the install block. Then explicitly tell the user in the user's language:
+Report the structural doctor JSON from the install block. This install-time doctor intentionally skips external `codex` commands to avoid sandbox noise before restart. Then explicitly tell the user in the user's language:
 
 ```text
 Please restart Codex App and return to this conversation, or open a new CLI session, so Codex can rescan ~/.agents/skills. Then say "Back up current Codex environment".
