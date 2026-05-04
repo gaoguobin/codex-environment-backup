@@ -507,6 +507,20 @@ service_tier = "auto"
             self.assertTrue(status_result["stdout_summary"]["provider_present"])
             self.assertTrue(status_result["stdout_summary"]["base_url_present"])
 
+    def test_cli_doctor_is_structural_by_default(self) -> None:
+        from codex_environment_backup.cli import build_parser
+
+        args = build_parser().parse_args(["doctor"])
+        self.assertFalse(args.run_commands)
+        self.assertFalse(args.no_run_commands)
+
+    def test_cli_doctor_supports_explicit_command_probe(self) -> None:
+        from codex_environment_backup.cli import build_parser
+
+        args = build_parser().parse_args(["doctor", "--run-commands"])
+        self.assertTrue(args.run_commands)
+        self.assertFalse(args.no_run_commands)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -58,7 +58,12 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument(
         "--no-run-commands",
         action="store_true",
-        help="Skip codex and optional integration commands.",
+        help="Deprecated compatibility flag. Doctor is structural by default.",
+    )
+    doctor.add_argument(
+        "--run-commands",
+        action="store_true",
+        help="Also run external codex and optional integration commands.",
     )
 
     list_cmd = subparsers.add_parser("list-backups", help="List local backup manifests")
@@ -95,9 +100,11 @@ def main(argv: list[str] | None = None) -> int:
             emit_json(result)
             return 0 if result.get("ok") else 1
         if args.command == "doctor":
+            if args.run_commands and args.no_run_commands:
+                parser.error("doctor accepts only one of --run-commands or --no-run-commands")
             result = doctor_codex_environment(
                 args.codex_home,
-                run_commands=not args.no_run_commands,
+                run_commands=args.run_commands,
             )
             emit_json(result)
             return 0 if result.get("ok") else 1

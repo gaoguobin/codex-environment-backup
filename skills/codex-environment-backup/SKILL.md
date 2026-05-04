@@ -22,6 +22,7 @@ Run the CLI as the source of truth:
 
 ```text
 <python-cmd> -m codex_environment_backup doctor
+<python-cmd> -m codex_environment_backup doctor --run-commands
 <python-cmd> -m codex_environment_backup backup
 <python-cmd> -m codex_environment_backup list-backups
 <python-cmd> -m codex_environment_backup restore --archive <backup>
@@ -45,7 +46,7 @@ For natural language backup requests:
 3. Report `ok`, `backup_dir`, `archive`, `archive_sha256`, `sha256_file`, and `counts`.
 4. Remind the user that the archive is local and sensitive.
 
-For backup requests, `core_ok=false` or `path_scan_ok=false` blocks backup. `command_ok=false` is a health warning, not a backup blocker; report the failed command summary and continue unless the user only asked for a health check.
+The default doctor is structural and does not launch nested `codex` commands. For backup requests, `core_ok=false` or `path_scan_ok=false` blocks backup. `command_ok=false` is a health warning, not a backup blocker; report the failed command summary and continue unless the user only asked for a health check.
 
 Do not ask the user to run commands for normal backup requests. Ask for approval only when sandbox, filesystem, network, or install policy requires it.
 
@@ -86,13 +87,21 @@ For health checks:
 <python-cmd> -m codex_environment_backup doctor
 ```
 
+This is the default path for natural-language health checks. It reports backup readiness without external command probe noise.
+
+For explicit command-level checks only:
+
+```text
+<python-cmd> -m codex_environment_backup doctor --run-commands
+```
+
 For listing backups:
 
 ```text
 <python-cmd> -m codex_environment_backup list-backups
 ```
 
-Report `core_ok`, `path_scan_ok`, `command_ok`, command failures, and presence/counts for config, hooks, sessions, archived sessions, memories, skills, plugins, rules, automations, and optional `codex-fast-proxy` status. If `codex_fast_proxy` is not installed, report it as skipped rather than failed. Do not print provider URLs, local state paths, or full integration stdout from optional integrations.
+Report `core_ok`, `path_scan_ok`, `command_ok`, whether command probes were skipped, and presence/counts for config, hooks, sessions, archived sessions, memories, skills, plugins, rules, automations, and optional `codex-fast-proxy` status. If `codex_fast_proxy` is not installed, report it as skipped rather than failed. Do not print provider URLs, local state paths, or full integration stdout from optional integrations.
 
 ## Install, update, uninstall
 

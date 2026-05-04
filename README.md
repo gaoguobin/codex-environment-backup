@@ -70,6 +70,11 @@ Ask Codex:
 Check Codex environment backup health
 ```
 
+The default health check is structural: it checks `CODEX_HOME`, important paths,
+config parsing, and backup readiness without launching nested `codex` commands.
+Ask for a command-level doctor only when you explicitly want Codex CLI/MCP
+subprocess probing too.
+
 ## Restore
 
 Ask Codex:
@@ -211,6 +216,7 @@ is acceptable when it points to Python 3.11+.
 
 ```powershell
 python -m codex_environment_backup doctor
+python -m codex_environment_backup doctor --run-commands
 python -m codex_environment_backup backup
 python -m codex_environment_backup list-backups
 python -m codex_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz
@@ -219,6 +225,10 @@ python -m codex_environment_backup restore --archive C:\path\to\codex-backup-YYY
 
 On systems where `python3` is the Python 3 command, replace `python` with
 `python3`.
+
+`doctor` is structural by default. Add `--run-commands` for explicit
+command-level probes such as `codex --version`, `codex mcp list`, and optional
+integration checks.
 
 Before an apply restore, the tool creates a pre-restore backup of the current
 `CODEX_HOME`. After apply, the default post-restore check is structural only so
@@ -374,12 +384,16 @@ CLI 留给高级用户、CI、smoke test、自动化和 Codex 自身不可用时
 
 ```powershell
 python -m codex_environment_backup doctor
+python -m codex_environment_backup doctor --run-commands
 python -m codex_environment_backup backup
 python -m codex_environment_backup list-backups
 python -m codex_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz
 python -m codex_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz --apply --i-understand-this-restores-sensitive-codex-state
 python -m codex_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz --apply --i-understand-this-restores-sensitive-codex-state --run-post-restore-commands
 ```
+
+`doctor` 默认只做结构体检。确实需要命令级探测 `codex --version`、`codex mcp list` 和可选集成时，
+再加 `--run-commands`。
 
 如果系统里 `python3` 才是 Python 3，请把上面的 `python` 换成 `python3`。
 apply 恢复后的默认体检只做结构检查，避免外部 `codex` 命令在恢复目标里重新生成运行期目录。

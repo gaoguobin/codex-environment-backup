@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codex-environment-backup"
-version = "0.1.1"
+version = "0.1.2"
 description = "Offline backup, restore, and health checks for local Codex environments."
 readme = "README.md"
 requires-python = ">=3.11"
