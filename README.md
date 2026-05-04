@@ -141,6 +141,20 @@ codex-backup-YYYYMMDD-HHMMSS/
   restore-standalone.py
 ```
 
+## Backup Retention
+
+The tool never deletes old backups by default. Keep at least one known-good
+backup until a newer backup has been verified. A practical verification means:
+
+- `backup` reported `ok=true`
+- the archive and `.sha256` file exist
+- `list-backups` shows the new backup with readable metadata
+- a restore dry-run against the new archive reports `ok=true`
+
+After that, older backups can be deleted as a separate cleanup task if the user
+explicitly asks for it. Treat deletion as destructive because backups may be the
+only recovery path for lost Codex history or provider state.
+
 ## Compatibility
 
 - Python 3.11+.
@@ -341,6 +355,18 @@ Windows 上通常类似：
 ```text
 C:\Users\<you>\Documents\CodexBackups
 ```
+
+### 备份保留
+
+工具不会默认删除旧备份。正式安装后，建议先完成一次新的正式备份，并确认：
+
+- `backup` 返回 `ok=true`
+- 压缩包和 `.sha256` 文件都存在
+- `list-backups` 能正常列出新备份和元数据
+- 用新压缩包跑一次 restore dry-run，结果是 `ok=true`
+
+确认新备份可用后，旧备份可以作为单独清理任务删除；删除前要把它当成破坏性操作处理，因为旧备份可能是
+找回历史记录、provider 配置或登录状态的最后兜底。
 
 ### 更新
 

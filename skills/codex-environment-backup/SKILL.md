@@ -119,6 +119,7 @@ These flows are still natural-language initiated. The user should paste or ask C
 - Do not print API keys, `auth.json` contents, conversation contents, request bodies, or full session files.
 - Do not upload backup archives to GitHub or any remote storage unless the user explicitly asks after the sensitivity warning.
 - Do not delete old backups by default.
+- Before deleting old backups, verify that a newer backup reported `ok=true`, has an archive and SHA256 file, appears in `list-backups`, and passes restore dry-run.
 - Do not edit ACLs. Diagnose Windows sandbox ACL problems only.
 - Do not include `.sandbox-secrets`, `.sandbox`, `.sandbox-bin`, `.tmp`, `tmp`, or live SQLite WAL/SHM files.
 - Do not ask the user to manually run CLI commands in normal backup/doctor/list workflows.

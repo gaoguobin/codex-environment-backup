@@ -13,6 +13,9 @@ Fetch and follow instructions from https://raw.githubusercontent.com/gaoguobin/c
 This file is for Codex to execute after the user asks for uninstall in natural language or pastes the one-paste prompt. Do not ask the user to manually type the command block unless Codex itself is unavailable.
 
 Uninstall removes the package, skill link, and cloned repo. It must not delete generated backup archives or backup directories unless the user explicitly asks for that separate cleanup.
+If the user later asks to remove old backups, first confirm that a newer backup
+has been created, appears in `list-backups`, has a SHA256 file, and passes a
+restore dry-run.
 
 If the Codex environment uses sandbox or approval controls, request approval/escalation for uninstall because it may uninstall a Python package, remove a link under `~/.agents`, and delete `~/.codex/codex-environment-backup`.
 

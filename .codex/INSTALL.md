@@ -138,6 +138,10 @@ Please restart Codex App and return to this conversation, or open a new CLI sess
 
 Do not claim the skill is available before the restart.
 
+If this is a reinstall after previous testing, do not delete existing backups
+during install. Tell the user to create and verify one new official backup first
+before separately cleaning up older backup archives.
+
 After restarting Codex App or opening a new CLI process, the user can ask:
 
 - `Back up current Codex environment`
