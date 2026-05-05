@@ -588,6 +588,43 @@ service_tier = "auto"
             result = inspect_claude_code_config(home)
             self.assertFalse(result["present"])
 
+    def make_claude_code_home(self, root: Path) -> Path:
+        home = root / "claude-home"
+        home.mkdir(parents=True)
+        (home / "projects").mkdir()
+        (home / "memory").mkdir()
+        (home / "todos").mkdir()
+        (home / "plugins").mkdir()
+        (home / "statsig").mkdir()
+        (home / "settings.json").write_text(
+            json.dumps({"model": "claude-sonnet-4-6", "permissions": {"allow": []}}),
+            encoding="utf-8",
+        )
+        (home / "settings.local.json").write_text("{}", encoding="utf-8")
+        (home / "credentials.json").write_text(
+            '{"access_token":"FAKE-CLAUDE-TOKEN"}', encoding="utf-8"
+        )
+        (home / "keybindings.json").write_text("[]", encoding="utf-8")
+        self.make_sqlite(home / "data.sqlite", "data")
+        return home
+
+    def test_doctor_claude_code_profile_structural(self) -> None:
+        from codex_environment_backup.core import doctor_environment, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            home = self.make_claude_code_home(Path(temp_dir))
+            report = doctor_environment(home, profile=CLAUDE_CODE_PROFILE, run_commands=False)
+            self.assertTrue(report["ok"], report)
+            self.assertIn("settings.json", report["paths"])
+            self.assertIn("projects", report["paths"])
+            self.assertIn("memory", report["paths"])
+            self.assertNotIn("auth.json", report["paths"])
+            self.assertNotIn("sessions", report["paths"])
+            self.assertIn("home", report)
+            self.assertNotIn("codex_home", report)
+            self.assertEqual(report["profile"], "claude-code")
+            report_json = json.dumps(report)
+            self.assertNotIn("FAKE-CLAUDE-TOKEN", report_json)
+
     def test_cli_doctor_is_structural_by_default(self) -> None:
         from codex_environment_backup.cli import build_parser
 

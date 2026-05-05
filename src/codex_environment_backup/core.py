@@ -475,44 +475,41 @@ def count_tree(path: Path) -> dict[str, Any]:
     return {"present": True, "files": files, "dirs": dirs, "errors": errors}
 
 
-def doctor_codex_environment(
-    codex_home: str | os.PathLike[str] | None = None,
+def _command_key(cmd: tuple[str, ...]) -> str:
+    """Derive a dict key from a command tuple, e.g. ("codex", "--version") -> "codex_version"."""
+    return "_".join(part.lstrip("-") for part in cmd).replace("-", "_")
+
+
+def doctor_environment(
+    home_override: str | os.PathLike[str] | None = None,
     *,
+    profile: EnvironmentProfile | None = None,
     run_commands: bool = True,
 ) -> dict[str, Any]:
-    home = resolve_codex_home(codex_home)
+    if profile is None:
+        profile = CODEX_PROFILE
+    home = resolve_home(profile, home_override)
     core_ok = home.exists() and home.is_dir()
+    config = profile.config_inspector(home) if profile.config_inspector is not None else {}
     report: dict[str, Any] = {
         "ok": core_ok,
         "core_ok": core_ok,
         "created_at": utc_now_iso(),
-        "codex_home": str(home),
+        "home": str(home),
+        "profile": profile.name,
         "platform": {
             "system": platform.system(),
             "release": platform.release(),
             "machine": platform.machine(),
             "python": platform.python_version(),
         },
-        "sensitive_note": SENSITIVE_NOTE,
+        "sensitive_note": _make_sensitive_note(profile.display_name),
         "paths": {},
-        "config": inspect_config(home),
+        "config": config,
         "commands": {},
     }
 
-    important_paths = [
-        "auth.json",
-        "hooks.json",
-        "history.jsonl",
-        "sessions",
-        "archived_sessions",
-        "memories",
-        "skills",
-        "plugins",
-        "rules",
-        "automations",
-        "codex-fast-proxy-state",
-    ]
-    for rel in important_paths:
+    for rel in profile.important_paths:
         target = home / rel
         if target.is_dir():
             report["paths"][rel] = count_tree(target)
@@ -532,31 +529,33 @@ def doctor_codex_environment(
 
     if run_commands:
         command_env = os.environ.copy()
-        command_env["CODEX_HOME"] = str(home)
-        report["commands"]["codex_version"] = run_command(
-            ["codex", "--version"], env=command_env
-        )
-        report["commands"]["codex_mcp_list"] = run_command(
-            ["codex", "mcp", "list"], env=command_env
-        )
-        if importlib.util.find_spec("codex_fast_proxy") is not None:
-            report["commands"]["codex_fast_proxy_status"] = run_command(
-                [sys.executable, "-m", "codex_fast_proxy", "status"],
-                env=command_env,
-                include_output=False,
-                json_summary=True,
+        if profile.env_home_var is not None:
+            command_env[profile.env_home_var] = str(home)
+        for cmd in profile.commands:
+            report["commands"][_command_key(cmd)] = run_command(
+                list(cmd), env=command_env
             )
-            report["commands"]["codex_fast_proxy_doctor"] = run_command(
-                [sys.executable, "-m", "codex_fast_proxy", "doctor"],
-                env=command_env,
-                include_output=False,
-                json_summary=True,
-            )
-        else:
-            report["commands"]["codex_fast_proxy"] = {
-                "status": "skipped",
-                "reason": "module_not_available",
-            }
+        if profile.integration_module is not None:
+            module_name = profile.integration_module
+            if importlib.util.find_spec(module_name) is not None:
+                module_key = module_name.replace("-", "_")
+                report["commands"][f"{module_key}_status"] = run_command(
+                    [sys.executable, "-m", module_name, "status"],
+                    env=command_env,
+                    include_output=False,
+                    json_summary=True,
+                )
+                report["commands"][f"{module_key}_doctor"] = run_command(
+                    [sys.executable, "-m", module_name, "doctor"],
+                    env=command_env,
+                    include_output=False,
+                    json_summary=True,
+                )
+            else:
+                report["commands"][module_name.replace("-", "_")] = {
+                    "status": "skipped",
+                    "reason": "module_not_available",
+                }
     command_summary = summarize_command_results(report["commands"], run=run_commands)
     report["command_summary"] = command_summary
     report["command_ok"] = command_summary["ok"]
@@ -567,6 +566,14 @@ def doctor_codex_environment(
     }
     report["ok"] = all(report["checks"].values())
     return report
+
+
+def doctor_codex_environment(
+    codex_home: str | os.PathLike[str] | None = None,
+    *,
+    run_commands: bool = True,
+) -> dict[str, Any]:
+    return doctor_environment(codex_home, profile=CODEX_PROFILE, run_commands=run_commands)
 
 
 def error_relative_path(base: Path, raw_path: object) -> str:
@@ -643,7 +650,7 @@ def write_environment_snapshot(path: Path, doctor_report: dict[str, Any]) -> Non
     lines = [
         "Codex environment snapshot",
         f"Created: {doctor_report['created_at']}",
-        f"Codex home: {doctor_report['codex_home']}",
+        f"Codex home: {doctor_report['home']}",
         f"Platform: {doctor_report['platform']['system']} {doctor_report['platform']['release']} {doctor_report['platform']['machine']}",
         f"Python: {doctor_report['platform']['python']}",
         f"Core ok: {doctor_report.get('core_ok')}",
