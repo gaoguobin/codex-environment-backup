@@ -834,5 +834,85 @@ service_tier = "auto"
             self.assertNotIn(".codex", output["target_home"])
 
 
+    # -- Fix 2: Cross-profile restore mismatch warning --
+    def test_restore_warns_on_profile_mismatch(self) -> None:
+        from agent_environment_backup.core import (
+            create_backup, restore_backup, CODEX_PROFILE, CLAUDE_CODE_PROFILE,
+        )
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            claude_home = self.make_claude_code_home(root)
+            backup_result = create_backup(
+                claude_home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-mismatch-test",
+                run_doctor_commands=False,
+            )
+            archive = Path(backup_result["archive"])
+            result = restore_backup(archive, root / "target", profile=CODEX_PROFILE)
+            self.assertTrue(result["dry_run"])
+            self.assertTrue(result.get("profile_mismatch"))
+            self.assertEqual(result["profile_mismatch"]["backup_profile"], "claude-code")
+            self.assertEqual(result["profile_mismatch"]["restore_profile"], "codex")
+
+    # -- Fix 4: Thread extra_excluded_dirs through restore --
+    def test_restore_respects_profile_exclusions(self) -> None:
+        from agent_environment_backup.core import (
+            create_backup, restore_backup, CLAUDE_CODE_PROFILE,
+        )
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            cache_dir = home / "cache"
+            cache_dir.mkdir()
+            (cache_dir / "temp.bin").write_text("cached", encoding="utf-8")
+            result = create_backup(
+                home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="excl-test",
+                run_doctor_commands=False,
+            )
+            manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+            paths = {e["relative_path"] for e in manifest["entries"]}
+            self.assertNotIn("cache/temp.bin", paths)
+
+    # -- Fix 6: Generalize remaining hardcoded text --
+    def test_snapshot_uses_profile_display_name(self) -> None:
+        from agent_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            result = create_backup(
+                home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="snapshot-text-test",
+                run_doctor_commands=False,
+            )
+            snapshot = (Path(result["backup_dir"]) / "environment-snapshot.txt").read_text(encoding="utf-8")
+            self.assertIn("Claude Code", snapshot)
+            self.assertNotIn("Codex environment snapshot", snapshot)
+
+    # -- Fix 7: Collision-suffixed backup_name --
+    def test_backup_name_matches_directory_after_collision(self) -> None:
+        from agent_environment_backup.core import create_backup, CODEX_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_home(root)
+            backup_root = root / "backups"
+            result1 = create_backup(
+                home, backup_root=backup_root, profile=CODEX_PROFILE,
+                timestamp="collide-test", run_doctor_commands=False,
+            )
+            result2 = create_backup(
+                home, backup_root=backup_root, profile=CODEX_PROFILE,
+                timestamp="collide-test", run_doctor_commands=False,
+            )
+            manifest2 = json.loads(Path(result2["manifest"]).read_text(encoding="utf-8"))
+            self.assertEqual(manifest2["backup_name"], Path(result2["backup_dir"]).name)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -655,18 +655,22 @@ def sqlite_integrity_check(database: Path) -> dict[str, Any]:
     return {"path": str(database), "ok": value == "ok", "result": value}
 
 
-def write_environment_snapshot(path: Path, doctor_report: dict[str, Any]) -> None:
+def write_environment_snapshot(
+    path: Path,
+    doctor_report: dict[str, Any],
+    display_name: str = "Codex",
+) -> None:
     lines = [
-        "Codex environment snapshot",
+        f"{display_name} environment snapshot",
         f"Created: {doctor_report['created_at']}",
-        f"Codex home: {doctor_report['home']}",
+        f"{display_name} home: {doctor_report['home']}",
         f"Platform: {doctor_report['platform']['system']} {doctor_report['platform']['release']} {doctor_report['platform']['machine']}",
         f"Python: {doctor_report['platform']['python']}",
         f"Core ok: {doctor_report.get('core_ok')}",
         f"Path scan ok: {doctor_report.get('path_scan_ok')}",
         f"Command ok: {doctor_report.get('command_ok')}",
         "",
-        SENSITIVE_NOTE,
+        _make_sensitive_note(display_name),
         "",
         "Important paths:",
     ]
@@ -1308,6 +1312,7 @@ def create_backup(
     while backup_dir.exists():
         backup_dir = root / f"{backup_name}-{suffix}"
         suffix += 1
+    backup_name = backup_dir.name
     files_dir = backup_dir / "files"
     files_dir.mkdir(parents=True)
 
@@ -1372,7 +1377,7 @@ def create_backup(
     write_json(backup_dir / "manifest.json", manifest)
     write_json(backup_dir / "sqlite-integrity-check.json", sqlite_checks)
     write_json(backup_dir / "doctor-report.json", doctor_report)
-    write_environment_snapshot(backup_dir / "environment-snapshot.txt", doctor_report)
+    write_environment_snapshot(backup_dir / "environment-snapshot.txt", doctor_report, profile.display_name)
 
     ok = not errors and all(check.get("ok") for check in sqlite_checks)
     summary_lines = [
@@ -1532,27 +1537,35 @@ def open_backup_source(source: Path, work_root: Path | None = None) -> Iterator[
         yield locate_backup_dir(temp_dir)
 
 
-def restore_plan(backup_dir: Path, codex_home: Path) -> dict[str, Any]:
+def restore_plan(
+    backup_dir: Path,
+    target_home: Path,
+    extra_excluded_dirs: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
     files_dir = backup_dir / "files"
     files = [
         path
         for path in files_dir.rglob("*")
-        if path.is_file() and not is_excluded(path.relative_to(files_dir))
+        if path.is_file() and not is_excluded(path.relative_to(files_dir), extra_excluded_dirs)
     ]
     total_bytes = sum(path.stat().st_size for path in files)
     return {
         "backup_dir": str(backup_dir),
-        "target_codex_home": str(codex_home),
+        "target_home": str(target_home),
         "files": len(files),
         "bytes": total_bytes,
         "mode": "overlay",
         "will_prune_existing_files": False,
-        "requires_codex_app_closed": True,
-        "will_skip_excluded_paths": sorted(EXCLUDED_DIR_NAMES),
+        "requires_app_closed": True,
+        "will_skip_excluded_paths": sorted(EXCLUDED_DIR_NAMES | extra_excluded_dirs),
     }
 
 
-def copy_backup_files(backup_dir: Path, codex_home: Path) -> dict[str, Any]:
+def copy_backup_files(
+    backup_dir: Path,
+    target_home: Path,
+    extra_excluded_dirs: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
     files_dir = backup_dir / "files"
     restored = 0
     skipped: list[str] = []
@@ -1561,10 +1574,10 @@ def copy_backup_files(backup_dir: Path, codex_home: Path) -> dict[str, Any]:
         if not source.is_file():
             continue
         relative = source.relative_to(files_dir)
-        if is_excluded(relative):
+        if is_excluded(relative, extra_excluded_dirs):
             skipped.append(normalize_relative(relative))
             continue
-        destination = codex_home / relative
+        destination = target_home / relative
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination, follow_symlinks=False)
@@ -1596,8 +1609,9 @@ def restore_backup(
     root = Path(backup_root).expanduser().resolve() if backup_root else default_backup_root(profile)
     source_path = Path(source).expanduser().resolve()
     source_is_dir = source_path.is_dir()
+    extra_excluded = frozenset(profile.extra_excluded_dirs)
     with open_backup_source(source_path, root) as backup_dir:
-        plan = restore_plan(backup_dir, home)
+        plan = restore_plan(backup_dir, home, extra_excluded)
         manifest_path = backup_dir / "manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if source_is_dir:
@@ -1628,15 +1642,26 @@ def restore_backup(
             "restore_kit": restore_kit,
             "sensitive_note": _make_sensitive_note(profile.display_name),
         }
+        manifest_profile = manifest.get("profile", "codex")
+        if manifest_profile != profile.name:
+            result["profile_mismatch"] = {
+                "backup_profile": manifest_profile,
+                "restore_profile": profile.name,
+                "warning": (
+                    f"This backup was created with profile '{manifest_profile}' "
+                    f"but restore is using profile '{profile.name}'. "
+                    "The backup may be restored to the wrong home directory."
+                ),
+            }
         if not apply:
             result["message"] = (
-                "Dry run only. Close Codex App before restore, then rerun with --apply "
-                "and --i-understand-this-restores-sensitive-codex-state."
+                f"Dry run only. Close {profile.display_name} before restore, then rerun with --apply "
+                "and --i-understand-this-restores-sensitive-state."
             )
             return result
         if not confirm:
             raise BackupError(
-                "Restore apply requires --i-understand-this-restores-sensitive-codex-state"
+                "Restore apply requires --i-understand-this-restores-sensitive-state"
             )
 
         pre_restore = None
@@ -1659,7 +1684,7 @@ def restore_backup(
                             "errors": [
                                 {
                                     "error": "pre_restore_backup_failed",
-                                    "message": "Restore aborted because the current CODEX_HOME could not be backed up completely.",
+                                    "message": f"Restore aborted because the current {profile.display_name} home could not be backed up completely.",
                                 }
                             ],
                         },
@@ -1671,7 +1696,7 @@ def restore_backup(
             root.mkdir(parents=True, exist_ok=True)
             home.mkdir(parents=True, exist_ok=True)
 
-        copy_result = copy_backup_files(backup_dir, home)
+        copy_result = copy_backup_files(backup_dir, home, extra_excluded)
         post_doctor = doctor_environment(home, profile=profile, run_commands=run_post_restore_commands)
         result.update(
             {
@@ -1682,8 +1707,8 @@ def restore_backup(
                 if run_post_restore_commands
                 else "structural",
                 "post_restore_next_steps": (
-                    "Reopen Codex or start a fresh CLI session, then run a full doctor check "
-                    "against the restored CODEX_HOME."
+                    f"Reopen {profile.display_name} or start a fresh CLI session, then run a full doctor check "
+                    "against the restored home."
                     if not run_post_restore_commands
                     else None
                 ),
