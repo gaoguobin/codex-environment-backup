@@ -922,5 +922,132 @@ service_tier = "auto"
             self.assertEqual(manifest2["backup_name"], Path(result2["backup_dir"]).name)
 
 
+    # -- Issue 1: Standalone pre-restore backup manifest includes profile field --
+    def test_standalone_pre_restore_manifest_has_profile(self) -> None:
+        from agent_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            result = create_backup(
+                home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-standalone-profile-test",
+                run_doctor_commands=False,
+            )
+            standalone_target = root / "standalone-restore-target"
+            standalone_target.mkdir()
+            (standalone_target / "settings.json").write_text('{"old":true}', encoding="utf-8")
+            standalone_prebacks = root / "standalone-prebacks"
+            standalone_apply = subprocess.run(
+                [
+                    sys.executable,
+                    result["restore_kit"]["restore_py"],
+                    "--backup-dir",
+                    result["backup_dir"],
+                    "--target-home",
+                    str(standalone_target),
+                    "--backup-root",
+                    str(standalone_prebacks),
+                    "--apply",
+                    "--confirm",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(standalone_apply.returncode, 0, standalone_apply.stderr)
+            pre_restore_dirs = sorted(standalone_prebacks.glob("pre-restore-claude-code-backup-*"))
+            self.assertTrue(pre_restore_dirs, "No pre-restore backup created")
+            pre_manifest_path = pre_restore_dirs[0] / "manifest.json"
+            self.assertTrue(pre_manifest_path.exists())
+            pre_manifest = json.loads(pre_manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(pre_manifest.get("profile"), "claude-code")
+
+    # -- Issue 2: Standalone restore uses profile-specific exclusions --
+    def test_standalone_restore_excludes_profile_dirs(self) -> None:
+        from agent_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            result = create_backup(
+                home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-excl-standalone-test",
+                run_doctor_commands=False,
+            )
+            # Manually place a cache/ dir inside the backup files dir
+            # to simulate a backup that contains cache files (e.g., from an older version)
+            backup_files = Path(result["backup_dir"]) / "files"
+            cache_dir = backup_files / "cache"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            (cache_dir / "stale.bin").write_text("stale", encoding="utf-8")
+
+            standalone_target = root / "standalone-excl-target"
+            standalone_target.mkdir()
+            standalone_apply = subprocess.run(
+                [
+                    sys.executable,
+                    result["restore_kit"]["restore_py"],
+                    "--backup-dir",
+                    result["backup_dir"],
+                    "--target-home",
+                    str(standalone_target),
+                    "--apply",
+                    "--confirm",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(standalone_apply.returncode, 0, standalone_apply.stderr)
+            # The cache/stale.bin should have been skipped during restore
+            self.assertFalse(
+                (standalone_target / "cache" / "stale.bin").exists(),
+                "Standalone restore should skip profile-excluded dirs (cache for claude-code)",
+            )
+
+    # -- Issue 5a: doctor count_tree uses extra_excluded_dirs --
+    def test_doctor_count_tree_respects_extra_excluded_dirs(self) -> None:
+        from agent_environment_backup.core import doctor_environment, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            # Create a cache dir with files that should be excluded from counting
+            cache_dir = home / "projects" / "cache"
+            cache_dir.mkdir(parents=True)
+            (cache_dir / "big.bin").write_text("cached data", encoding="utf-8")
+
+            report = doctor_environment(home, profile=CLAUDE_CODE_PROFILE, run_commands=False)
+            projects_info = report["paths"]["projects"]
+            # The cache dir and its file should not be counted
+            self.assertEqual(projects_info["dirs"], 0, "cache subdir should be excluded from dir count")
+            self.assertEqual(projects_info["files"], 0, "files under cache should be excluded")
+
+    # -- Issue 5b: backup_list_item defaults missing profile to "codex" --
+    def test_list_backups_defaults_missing_profile_to_codex(self) -> None:
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            backup_root = root / "backups"
+            legacy = backup_root / "old-backup"
+            legacy.mkdir(parents=True)
+            (legacy / "manifest.json").write_text(
+                json.dumps({
+                    "schema_version": 1,
+                    "created_at": "2026-01-01T00:00:00",
+                    "backup_name": "old-backup",
+                    "counts": {"files": 1, "sqlite_databases": 0, "errors": 0},
+                    "entries": [],
+                }) + "\n",
+                encoding="utf-8",
+            )
+            (legacy / "files").mkdir()
+            listing = list_backups(backup_root)
+            item = listing["backups"][0]
+            self.assertEqual(item["profile"], "codex",
+                             "Missing profile field should default to 'codex'")
+
+
 if __name__ == "__main__":
     unittest.main()

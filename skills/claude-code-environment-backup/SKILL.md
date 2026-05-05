@@ -26,7 +26,7 @@ Run the CLI as the source of truth:
 <python-cmd> -m agent_environment_backup --profile claude-code backup
 <python-cmd> -m agent_environment_backup --profile claude-code list-backups
 <python-cmd> -m agent_environment_backup --profile claude-code restore --archive <backup>
-<python-cmd> -m agent_environment_backup --profile claude-code restore --archive <backup> --apply --i-understand-this-restores-sensitive-codex-state
+<python-cmd> -m agent_environment_backup --profile claude-code restore --archive <backup> --apply --i-understand-this-restores-sensitive-state
 ```
 
 Resolve the Claude Code home directory in this order:
@@ -72,7 +72,7 @@ Provide the exact CLI handoff only for advanced users or when the restore helper
 When apply is safe to run from the current context, run:
 
 ```text
-<python-cmd> -m agent_environment_backup --profile claude-code restore --archive <backup> --apply --i-understand-this-restores-sensitive-codex-state
+<python-cmd> -m agent_environment_backup --profile claude-code restore --archive <backup> --apply --i-understand-this-restores-sensitive-state
 ```
 
 The CLI creates a pre-restore backup before applying. Restore overlays backed-up files and does not prune excluded paths.

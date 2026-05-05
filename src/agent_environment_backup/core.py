@@ -516,10 +516,11 @@ def doctor_environment(
         "commands": {},
     }
 
+    extra_excluded = frozenset(profile.extra_excluded_dirs)
     for rel in profile.important_paths:
         target = home / rel
         if target.is_dir():
-            report["paths"][rel] = count_tree(target)
+            report["paths"][rel] = count_tree(target, extra_excluded)
         else:
             report["paths"][rel] = {
                 "present": target.exists(),
@@ -787,6 +788,9 @@ RESTORE_STANDALONE_PY = dedent(
         "codex": ".codex",
         "claude-code": ".claude",
     }
+    PROFILE_EXTRA_EXCLUDED = {
+        "claude-code": {"cache"},
+    }
 
     def resolve_target_home(target_home: str | None = None, profile: str | None = None) -> Path:
         if target_home:
@@ -802,9 +806,10 @@ RESTORE_STANDALONE_PY = dedent(
         subdir = "ClaudeCodeBackups" if profile == "claude-code" else "CodexBackups"
         return (Path.home() / "Documents" / subdir).resolve()
 
-    def is_excluded(relative_path: Path) -> bool:
+    def is_excluded(relative_path: Path, profile: str = "codex") -> bool:
+        excluded = EXCLUDED_DIR_NAMES | PROFILE_EXTRA_EXCLUDED.get(profile, set())
         parts = [part.lower() for part in relative_path.parts if part not in ("", ".")]
-        if any(part in EXCLUDED_DIR_NAMES for part in parts):
+        if any(part in excluded for part in parts):
             return True
         return relative_path.name.lower().endswith(LIVE_SQLITE_SUFFIXES)
 
@@ -835,18 +840,18 @@ RESTORE_STANDALONE_PY = dedent(
             "error": str(exc),
         }
 
-    def iter_source_files(source_root: Path, errors: list):
+    def iter_source_files(source_root: Path, errors: list, profile: str = "codex"):
         def onerror(exc: OSError) -> None:
             errors.append(walk_error_entry(source_root, exc, "walk"))
 
         for root, dir_names, file_names in os.walk(source_root, onerror=onerror):
             root_path = Path(root)
             rel_root = root_path.relative_to(source_root)
-            dir_names[:] = [name for name in dir_names if not is_excluded(rel_root / name)]
+            dir_names[:] = [name for name in dir_names if not is_excluded(rel_root / name, profile)]
             for file_name in file_names:
                 source = root_path / file_name
                 relative = source.relative_to(source_root)
-                if is_excluded(relative):
+                if is_excluded(relative, profile):
                     continue
                 yield source, relative
 
@@ -863,7 +868,7 @@ RESTORE_STANDALONE_PY = dedent(
         finally:
             source_conn.close()
 
-    def create_backup(source_home: Path, backup_root: Path, prefix: str) -> dict:
+    def create_backup(source_home: Path, backup_root: Path, prefix: str, profile: str = "codex") -> dict:
         backup_root.mkdir(parents=True, exist_ok=True)
         backup_dir = backup_root / f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         suffix = 1
@@ -875,7 +880,7 @@ RESTORE_STANDALONE_PY = dedent(
         entries = []
         sqlite_checks = []
         errors = []
-        for source, relative in iter_source_files(source_home, errors):
+        for source, relative in iter_source_files(source_home, errors, profile):
             destination = files_dir / relative
             if source.suffix.lower() == ".sqlite":
                 backup_sqlite_database(source, destination)
@@ -892,6 +897,7 @@ RESTORE_STANDALONE_PY = dedent(
         write_json(backup_dir / "manifest.json", {
             "schema_version": 1,
             "created_at": datetime.now().isoformat(),
+            "profile": profile,
             "codex_home": str(source_home),
             "backup_name": backup_dir.name,
             "counts": {
@@ -1054,7 +1060,7 @@ RESTORE_STANDALONE_PY = dedent(
             except OSError:
                 pass
 
-    def restore_overlay(backup_dir: Path, target_home: Path) -> dict:
+    def restore_overlay(backup_dir: Path, target_home: Path, profile: str = "codex") -> dict:
         files_dir = backup_dir / "files"
         if not files_dir.is_dir():
             raise SystemExit(f"Backup directory does not contain files/: {backup_dir}")
@@ -1064,7 +1070,7 @@ RESTORE_STANDALONE_PY = dedent(
             if not source.is_file():
                 continue
             relative = source.relative_to(files_dir)
-            if is_excluded(relative):
+            if is_excluded(relative, profile):
                 skipped.append(relative.as_posix())
                 continue
             destination = target_home / relative
@@ -1115,7 +1121,7 @@ RESTORE_STANDALONE_PY = dedent(
         pre_prefix = "pre-restore-claude-code-backup" if profile == "claude-code" else "pre-restore-codex-backup"
         pre_restore = None
         if target_home.exists():
-            pre_restore = create_backup(target_home, backup_root, pre_prefix)
+            pre_restore = create_backup(target_home, backup_root, pre_prefix, profile=profile)
             if not pre_restore.get("ok"):
                 print(json.dumps({
                     "ok": False,
@@ -1132,7 +1138,7 @@ RESTORE_STANDALONE_PY = dedent(
                 return 2
         else:
             target_home.mkdir(parents=True, exist_ok=True)
-        result = restore_overlay(backup_dir, target_home)
+        result = restore_overlay(backup_dir, target_home, profile)
         post = {
             "pre_restore_backup": pre_restore,
             "restore": result,
@@ -1758,7 +1764,7 @@ def backup_list_item(manifest: Path, data: dict[str, Any]) -> dict[str, Any]:
         "backup_dir": str(manifest.parent),
         "status": status,
         "schema_version": schema_label,
-        "profile": data.get("profile"),
+        "profile": data.get("profile", "codex"),
         "created_at": data.get("created_at") or data.get("generated_at"),
         "files": files,
         "sqlite_databases": sqlite_databases,

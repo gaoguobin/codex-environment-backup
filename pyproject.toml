@@ -19,6 +19,7 @@ classifiers = [
 
 [project.scripts]
 agent-environment-backup = "agent_environment_backup.cli:main"
+codex-environment-backup = "codex_environment_backup.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
