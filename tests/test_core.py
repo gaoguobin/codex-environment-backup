@@ -19,11 +19,12 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-import codex_environment_backup.core as core_module  # noqa: E402
-from codex_environment_backup.core import (  # noqa: E402
+import agent_environment_backup.core as core_module  # noqa: E402
+from agent_environment_backup.core import (  # noqa: E402
     BackupError,
     create_backup,
     doctor_codex_environment,
+    doctor_environment,
     list_backups,
     restore_backup,
 )
@@ -509,7 +510,7 @@ service_tier = "auto"
             self.assertTrue(status_result["stdout_summary"]["base_url_present"])
 
     def test_profile_registry_contains_both_profiles(self) -> None:
-        from codex_environment_backup.core import PROFILES, CODEX_PROFILE, CLAUDE_CODE_PROFILE
+        from agent_environment_backup.core import PROFILES, CODEX_PROFILE, CLAUDE_CODE_PROFILE
         self.assertIn("codex", PROFILES)
         self.assertIn("claude-code", PROFILES)
         self.assertIs(PROFILES["codex"], CODEX_PROFILE)
@@ -524,7 +525,7 @@ service_tier = "auto"
         self.assertEqual(CLAUDE_CODE_PROFILE.backup_prefix, "claude-code-backup")
 
     def test_resolve_home_uses_profile_default(self) -> None:
-        from codex_environment_backup.core import resolve_home, CODEX_PROFILE, CLAUDE_CODE_PROFILE
+        from agent_environment_backup.core import resolve_home, CODEX_PROFILE, CLAUDE_CODE_PROFILE
         env_without_codex_home = {k: v for k, v in os.environ.items() if k != "CODEX_HOME"}
         with mock.patch.dict(os.environ, env_without_codex_home, clear=True):
             codex_home = resolve_home(CODEX_PROFILE)
@@ -533,7 +534,7 @@ service_tier = "auto"
         self.assertEqual(claude_home, (Path.home() / ".claude").resolve())
 
     def test_resolve_home_respects_env_var(self) -> None:
-        from codex_environment_backup.core import resolve_home, CODEX_PROFILE, CLAUDE_CODE_PROFILE
+        from agent_environment_backup.core import resolve_home, CODEX_PROFILE, CLAUDE_CODE_PROFILE
         with mock.patch.dict(os.environ, {"CODEX_HOME": "/tmp/custom-codex"}):
             result = resolve_home(CODEX_PROFILE)
         self.assertEqual(result, Path("/tmp/custom-codex").resolve())
@@ -543,20 +544,20 @@ service_tier = "auto"
         self.assertEqual(result, (Path.home() / ".claude").resolve())
 
     def test_resolve_home_override_takes_precedence(self) -> None:
-        from codex_environment_backup.core import resolve_home, CODEX_PROFILE
+        from agent_environment_backup.core import resolve_home, CODEX_PROFILE
         with mock.patch.dict(os.environ, {"CODEX_HOME": "/tmp/env"}):
             result = resolve_home(CODEX_PROFILE, "/tmp/explicit")
         self.assertEqual(result, Path("/tmp/explicit").resolve())
 
     def test_default_backup_root_uses_profile(self) -> None:
-        from codex_environment_backup.core import default_backup_root, CODEX_PROFILE, CLAUDE_CODE_PROFILE
+        from agent_environment_backup.core import default_backup_root, CODEX_PROFILE, CLAUDE_CODE_PROFILE
         codex_root = default_backup_root(CODEX_PROFILE)
         claude_root = default_backup_root(CLAUDE_CODE_PROFILE)
         self.assertTrue(str(codex_root).endswith("CodexBackups"))
         self.assertTrue(str(claude_root).endswith("ClaudeCodeBackups"))
 
     def test_inspect_claude_code_config(self) -> None:
-        from codex_environment_backup.core import inspect_claude_code_config
+        from agent_environment_backup.core import inspect_claude_code_config
         with self.temp_root() as temp_dir:
             home = Path(temp_dir) / "claude-home"
             home.mkdir()
@@ -581,7 +582,7 @@ service_tier = "auto"
             self.assertTrue(result["allowed_tools_present"])
 
     def test_inspect_claude_code_config_missing(self) -> None:
-        from codex_environment_backup.core import inspect_claude_code_config
+        from agent_environment_backup.core import inspect_claude_code_config
         with self.temp_root() as temp_dir:
             home = Path(temp_dir) / "claude-home"
             home.mkdir()
@@ -609,7 +610,7 @@ service_tier = "auto"
         return home
 
     def test_doctor_claude_code_profile_structural(self) -> None:
-        from codex_environment_backup.core import doctor_environment, CLAUDE_CODE_PROFILE
+        from agent_environment_backup.core import doctor_environment, CLAUDE_CODE_PROFILE
         with self.temp_root() as temp_dir:
             home = self.make_claude_code_home(Path(temp_dir))
             report = doctor_environment(home, profile=CLAUDE_CODE_PROFILE, run_commands=False)
@@ -626,7 +627,7 @@ service_tier = "auto"
             self.assertNotIn("FAKE-CLAUDE-TOKEN", report_json)
 
     def test_backup_claude_code_profile(self) -> None:
-        from codex_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
+        from agent_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
         with self.temp_root() as temp_dir:
             root = Path(temp_dir)
             home = self.make_claude_code_home(root)
@@ -652,7 +653,7 @@ service_tier = "auto"
             self.assertIn("data.sqlite", paths)
 
     def test_restore_claude_code_profile_dry_run_and_apply(self) -> None:
-        from codex_environment_backup.core import (
+        from agent_environment_backup.core import (
             create_backup, restore_backup, list_backups, CLAUDE_CODE_PROFILE,
         )
         with self.temp_root() as temp_dir:
@@ -695,38 +696,47 @@ service_tier = "auto"
             ))
 
     def test_cli_doctor_is_structural_by_default(self) -> None:
-        from codex_environment_backup.cli import build_parser
+        from agent_environment_backup.cli import build_parser
 
         args = build_parser().parse_args(["doctor"])
         self.assertFalse(args.run_commands)
         self.assertFalse(args.no_run_commands)
 
     def test_cli_doctor_supports_explicit_command_probe(self) -> None:
-        from codex_environment_backup.cli import build_parser
+        from agent_environment_backup.cli import build_parser
 
         args = build_parser().parse_args(["doctor", "--run-commands"])
         self.assertTrue(args.run_commands)
         self.assertFalse(args.no_run_commands)
 
     def test_cli_profile_argument_default(self) -> None:
-        from codex_environment_backup.cli import build_parser
+        from agent_environment_backup.cli import build_parser
         args = build_parser().parse_args(["doctor"])
         self.assertEqual(args.profile, "codex")
 
     def test_cli_profile_argument_claude_code(self) -> None:
-        from codex_environment_backup.cli import build_parser
+        from agent_environment_backup.cli import build_parser
         args = build_parser().parse_args(["--profile", "claude-code", "doctor"])
         self.assertEqual(args.profile, "claude-code")
 
     def test_cli_home_argument_and_codex_home_alias(self) -> None:
-        from codex_environment_backup.cli import build_parser
+        from agent_environment_backup.cli import build_parser
         args = build_parser().parse_args(["doctor", "--home", "/tmp/test"])
         self.assertEqual(args.home, "/tmp/test")
         args2 = build_parser().parse_args(["doctor", "--codex-home", "/tmp/test2"])
         self.assertEqual(args2.home, "/tmp/test2")
 
+    def test_shim_package_reexports(self) -> None:
+        import codex_environment_backup as shim
+        import agent_environment_backup as main_pkg
+        self.assertIs(shim.BackupError, main_pkg.BackupError)
+        self.assertIs(shim.create_backup, main_pkg.create_backup)
+        self.assertIs(shim.CODEX_PROFILE, main_pkg.CODEX_PROFILE)
+        self.assertIs(shim.CLAUDE_CODE_PROFILE, main_pkg.CLAUDE_CODE_PROFILE)
+        self.assertIs(shim.resolve_home, main_pkg.resolve_home)
+
     def test_cli_restore_confirm_flag_and_alias(self) -> None:
-        from codex_environment_backup.cli import build_parser
+        from agent_environment_backup.cli import build_parser
         args = build_parser().parse_args([
             "restore", "--archive", "/tmp/a.tar.gz",
             "--apply", "--i-understand-this-restores-sensitive-state",
@@ -739,7 +749,7 @@ service_tier = "auto"
         self.assertTrue(args2.confirm)
 
     def test_restore_kit_uses_profile_display_name(self) -> None:
-        from codex_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
+        from agent_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
         with self.temp_root() as temp_dir:
             root = Path(temp_dir)
             home = self.make_claude_code_home(root)
