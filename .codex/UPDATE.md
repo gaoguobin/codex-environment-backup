@@ -60,7 +60,7 @@ if (-not (Test-Path $skillNamespace)) {
     cmd /d /c "mklink /J `"$skillNamespace`" `"$repoRoot\skills`""
 }
 
-& $pythonCmd -m codex_environment_backup doctor
+& $pythonCmd -m agent_environment_backup --profile codex doctor
 ```
 
 ### macOS or Linux shell
@@ -105,7 +105,7 @@ if [ ! -e "$skill_namespace" ]; then
   ln -s "$repo_root/skills" "$skill_namespace"
 fi
 
-"$python_cmd" -m codex_environment_backup doctor
+"$python_cmd" -m agent_environment_backup --profile codex doctor
 ```
 
 Report the final structural doctor JSON. The default doctor intentionally skips external `codex` commands to avoid sandbox noise before restart. If skill files changed or the skill link was newly created, explicitly tell the user in the user's language:

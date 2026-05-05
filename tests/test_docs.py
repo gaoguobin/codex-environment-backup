@@ -28,10 +28,10 @@ class DocumentationShapeTests(unittest.TestCase):
 
         self.assertIn("请重启 Codex App 并回到这个对话", install)
         self.assertIn("备份当前 Codex 环境", install)
-        self.assertIn("codex_environment_backup doctor", install)
+        self.assertIn("agent_environment_backup", install)
         self.assertNotIn("doctor --no-run-commands", install)
         self.assertIn("请重启 Codex App 并回到这个对话", update)
-        self.assertIn("codex_environment_backup doctor", update)
+        self.assertIn("agent_environment_backup", update)
         self.assertNotIn("doctor --no-run-commands", update)
         self.assertIn("让它从 skill 列表中移除 codex-environment-backup", uninstall)
 
@@ -46,6 +46,19 @@ class DocumentationShapeTests(unittest.TestCase):
         uninstall = self.read(".codex/UNINSTALL.md")
         self.assertIn("$LASTEXITCODE", uninstall)
         self.assertIn("for candidate in python3 python", uninstall)
+
+
+    def test_claude_code_skill_exists_and_has_profile(self) -> None:
+        skill = self.read("skills/claude-code-environment-backup/SKILL.md")
+        self.assertIn("--profile claude-code", skill)
+        self.assertIn("agent_environment_backup", skill)
+        self.assertIn("Claude Code", skill)
+        self.assertNotIn("codex_environment_backup", skill)
+
+    def test_codex_skill_uses_new_module_name(self) -> None:
+        skill = self.read("skills/codex-environment-backup/SKILL.md")
+        self.assertIn("agent_environment_backup", skill)
+        self.assertIn("--profile codex", skill)
 
 
 if __name__ == "__main__":
