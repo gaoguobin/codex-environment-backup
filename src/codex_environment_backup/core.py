@@ -455,7 +455,10 @@ PROFILES: dict[str, EnvironmentProfile] = {
 }
 
 
-def count_tree(path: Path) -> dict[str, Any]:
+def count_tree(
+    path: Path,
+    extra_excluded_dirs: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
     if not path.exists():
         return {"present": False, "files": 0, "dirs": 0}
     files = 0
@@ -468,10 +471,14 @@ def count_tree(path: Path) -> dict[str, Any]:
     for root, dir_names, file_names in os.walk(path, onerror=onerror):
         rel_root = Path(root).relative_to(path)
         dir_names[:] = [
-            name for name in dir_names if not is_excluded(rel_root / name)
+            name for name in dir_names
+            if not is_excluded(rel_root / name, extra_excluded_dirs)
         ]
         dirs += len(dir_names)
-        files += sum(1 for name in file_names if not is_excluded(rel_root / name))
+        files += sum(
+            1 for name in file_names
+            if not is_excluded(rel_root / name, extra_excluded_dirs)
+        )
     return {"present": True, "files": files, "dirs": dirs, "errors": errors}
 
 
@@ -595,26 +602,28 @@ def walk_error_entry(base: Path, exc: OSError, *, method: str) -> dict[str, str]
 
 
 def iter_source_files(
-    codex_home: Path,
+    home: Path,
     errors: list[dict[str, str]] | None = None,
+    extra_excluded_dirs: frozenset[str] = frozenset(),
 ) -> Iterator[tuple[Path, Path]]:
     def onerror(exc: OSError) -> None:
-        entry = walk_error_entry(codex_home, exc, method="walk")
+        entry = walk_error_entry(home, exc, method="walk")
         if errors is not None:
             errors.append(entry)
             return
         raise BackupError(entry["error"])
 
-    for root, dir_names, file_names in os.walk(codex_home, onerror=onerror):
+    for root, dir_names, file_names in os.walk(home, onerror=onerror):
         root_path = Path(root)
-        rel_root = root_path.relative_to(codex_home)
+        rel_root = root_path.relative_to(home)
         dir_names[:] = [
-            name for name in dir_names if not is_excluded(rel_root / name)
+            name for name in dir_names
+            if not is_excluded(rel_root / name, extra_excluded_dirs)
         ]
         for file_name in file_names:
             source = root_path / file_name
-            relative = source.relative_to(codex_home)
-            if is_excluded(relative):
+            relative = source.relative_to(home)
+            if is_excluded(relative, extra_excluded_dirs):
                 continue
             yield source, relative
 
@@ -1260,21 +1269,28 @@ def create_backup(
     codex_home: str | os.PathLike[str] | None = None,
     *,
     backup_root: str | os.PathLike[str] | None = None,
+    profile: EnvironmentProfile | None = None,
     archive_format: str = "tar.gz",
     make_archive: bool = True,
     timestamp: str | None = None,
     run_doctor_commands: bool = True,
 ) -> dict[str, Any]:
-    home = resolve_codex_home(codex_home)
+    if profile is None:
+        profile = CODEX_PROFILE
+    home = resolve_home(profile, codex_home)
     if not home.exists() or not home.is_dir():
-        raise BackupError(f"Codex home does not exist or is not a directory: {home}")
+        raise BackupError(
+            f"{profile.display_name} home does not exist or is not a directory: {home}"
+        )
 
-    root = Path(backup_root).expanduser().resolve() if backup_root else default_backup_root()
+    root = Path(backup_root).expanduser().resolve() if backup_root else default_backup_root(profile)
     if is_relative_to(root, home):
-        raise BackupError("backup_root must not be inside CODEX_HOME")
+        raise BackupError(
+            f"backup_root must not be inside {profile.display_name} home"
+        )
     root.mkdir(parents=True, exist_ok=True)
 
-    backup_name = timestamp or local_timestamp()
+    backup_name = timestamp or local_timestamp(profile.backup_prefix)
     backup_dir = root / backup_name
     suffix = 1
     while backup_dir.exists():
@@ -1286,8 +1302,9 @@ def create_backup(
     entries: list[dict[str, Any]] = []
     sqlite_checks: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
+    extra_excluded = frozenset(profile.extra_excluded_dirs)
 
-    for source, relative in iter_source_files(home, errors):
+    for source, relative in iter_source_files(home, errors, extra_excluded):
         destination = files_dir / relative
         method = "copy2"
         try:
@@ -1317,17 +1334,19 @@ def create_backup(
                 }
             )
 
-    doctor_report = doctor_codex_environment(home, run_commands=run_doctor_commands)
+    sensitive_note = _make_sensitive_note(profile.display_name)
+    doctor_report = doctor_environment(home, profile=profile, run_commands=run_doctor_commands)
     manifest = {
         "schema_version": 1,
         "created_at": utc_now_iso(),
-        "codex_home": str(home),
+        "profile": profile.name,
+        "home": str(home),
         "backup_name": backup_name,
         "archive_format": archive_format if make_archive else None,
-        "sensitive_note": SENSITIVE_NOTE,
+        "sensitive_note": sensitive_note,
         "platform": doctor_report["platform"],
         "exclusions": {
-            "directory_names": sorted(EXCLUDED_DIR_NAMES),
+            "directory_names": sorted(EXCLUDED_DIR_NAMES | set(profile.extra_excluded_dirs)),
             "live_sqlite_suffixes": list(LIVE_SQLITE_SUFFIXES),
         },
         "entries": entries,
@@ -1345,16 +1364,16 @@ def create_backup(
 
     ok = not errors and all(check.get("ok") for check in sqlite_checks)
     summary_lines = [
-        "Codex environment backup",
+        f"{profile.display_name} environment backup",
         f"Backup: {backup_dir}",
-        f"Codex home: {home}",
+        f"{profile.display_name} home: {home}",
         f"Files: {len(entries)}",
         f"SQLite databases: {manifest['counts']['sqlite_databases']}",
         f"Errors: {len(errors)}",
         f"Integrity: {'ok' if all(check.get('ok') for check in sqlite_checks) else 'failed'}",
         "Restore kit: RESTORE.md, RESTORE_INSTRUCTIONS.txt, restore-codex-environment.cmd, restore-codex-environment.ps1, restore-codex-environment.command, restore-codex-environment.sh",
         "",
-        SENSITIVE_NOTE,
+        sensitive_note,
     ]
     (backup_dir / "backup-summary.txt").write_text(
         "\n".join(summary_lines) + "\n", encoding="utf-8"
@@ -1383,7 +1402,7 @@ def create_backup(
         "restore_kit": restore_kit,
         "counts": manifest["counts"],
         "errors": errors,
-        "sensitive_note": SENSITIVE_NOTE,
+        "sensitive_note": sensitive_note,
     }
 
 

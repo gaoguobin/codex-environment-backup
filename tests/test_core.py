@@ -625,6 +625,32 @@ service_tier = "auto"
             report_json = json.dumps(report)
             self.assertNotIn("FAKE-CLAUDE-TOKEN", report_json)
 
+    def test_backup_claude_code_profile(self) -> None:
+        from codex_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            backup_root = root / "backups"
+
+            result = create_backup(
+                home,
+                backup_root=backup_root,
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-code-backup-test",
+                run_doctor_commands=False,
+            )
+
+            self.assertTrue(result["ok"], result)
+            self.assertIn("claude-code-backup-test", result["backup_dir"])
+            manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+            self.assertEqual(manifest["profile"], "claude-code")
+            self.assertIn("home", manifest)
+            self.assertNotIn("codex_home", manifest)
+            paths = {entry["relative_path"] for entry in manifest["entries"]}
+            self.assertIn("settings.json", paths)
+            self.assertIn("credentials.json", paths)
+            self.assertIn("data.sqlite", paths)
+
     def test_cli_doctor_is_structural_by_default(self) -> None:
         from codex_environment_backup.cli import build_parser
 
