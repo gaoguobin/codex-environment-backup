@@ -779,17 +779,24 @@ RESTORE_STANDALONE_PY = dedent(
 
     EXCLUDED_DIR_NAMES = {".sandbox", ".sandbox-bin", ".sandbox-secrets", ".tmp", "tmp"}
     LIVE_SQLITE_SUFFIXES = (".sqlite-wal", ".sqlite-shm", "-wal", "-shm")
+    PROFILE_HOME_DEFAULTS = {
+        "codex": ".codex",
+        "claude-code": ".claude",
+    }
 
-    def resolve_target_home(target_home: str | None = None) -> Path:
+    def resolve_target_home(target_home: str | None = None, profile: str | None = None) -> Path:
         if target_home:
             return Path(target_home).expanduser().resolve()
-        env_home = os.environ.get("CODEX_HOME")
-        if env_home:
-            return Path(env_home).expanduser().resolve()
-        return (Path.home() / ".codex").resolve()
+        if profile == "codex":
+            env_home = os.environ.get("CODEX_HOME")
+            if env_home:
+                return Path(env_home).expanduser().resolve()
+        default_dir = PROFILE_HOME_DEFAULTS.get(profile or "codex", ".codex")
+        return (Path.home() / default_dir).resolve()
 
-    def default_backup_root() -> Path:
-        return (Path.home() / "Documents" / "CodexBackups").resolve()
+    def default_backup_root(profile: str | None = None) -> Path:
+        subdir = "ClaudeCodeBackups" if profile == "claude-code" else "CodexBackups"
+        return (Path.home() / "Documents" / subdir).resolve()
 
     def is_excluded(relative_path: Path) -> bool:
         parts = [part.lower() for part in relative_path.parts if part not in ("", ".")]
@@ -1073,14 +1080,16 @@ RESTORE_STANDALONE_PY = dedent(
         args = parser.parse_args(argv)
 
         backup_dir = Path(args.backup_dir).expanduser().resolve()
-        target_home = resolve_target_home(args.target_home)
-        backup_root = Path(args.backup_root).expanduser().resolve() if args.backup_root else default_backup_root()
 
         manifest_path = backup_dir / "manifest.json"
         if not manifest_path.exists():
             raise SystemExit(f"Missing manifest.json in {backup_dir}")
 
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        profile = manifest.get("profile", "codex")
+        target_home = resolve_target_home(args.target_home, profile)
+        backup_root = Path(args.backup_root).expanduser().resolve() if args.backup_root else default_backup_root(profile)
+
         print(json.dumps({
             "ok": True,
             "dry_run": not args.apply,
@@ -1099,9 +1108,10 @@ RESTORE_STANDALONE_PY = dedent(
         if not args.confirm:
             raise SystemExit("Missing confirmation for apply restore.")
 
+        pre_prefix = "pre-restore-claude-code-backup" if profile == "claude-code" else "pre-restore-codex-backup"
         pre_restore = None
         if target_home.exists():
-            pre_restore = create_backup(target_home, backup_root, "pre-restore-backup")
+            pre_restore = create_backup(target_home, backup_root, pre_prefix)
             if not pre_restore.get("ok"):
                 print(json.dumps({
                     "ok": False,

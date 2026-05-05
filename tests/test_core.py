@@ -157,7 +157,7 @@ service_tier = "auto"
                 check=False,
             )
             self.assertEqual(standalone_apply.returncode, 0, standalone_apply.stderr)
-            pre_restore_dirs = sorted(standalone_prebacks.glob("pre-restore-backup-*"))
+            pre_restore_dirs = sorted(standalone_prebacks.glob("pre-restore-codex-backup-*"))
             self.assertTrue(pre_restore_dirs, standalone_apply.stdout)
             pre_restore_dir = pre_restore_dirs[0]
             for helper_name in (
@@ -803,6 +803,35 @@ service_tier = "auto"
             }
             self.assertIn("codex", profiles_found)
             self.assertIn("claude-code", profiles_found)
+
+    def test_standalone_restore_claude_code_uses_claude_home(self) -> None:
+        from agent_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            result = create_backup(
+                home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-code-standalone-test",
+                run_doctor_commands=False,
+            )
+            standalone = subprocess.run(
+                [
+                    sys.executable,
+                    result["restore_kit"]["restore_py"],
+                    "--backup-dir",
+                    result["backup_dir"],
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(standalone.returncode, 0, standalone.stderr)
+            output = json.loads(standalone.stdout)
+            self.assertTrue(output["dry_run"])
+            self.assertIn(".claude", output["target_home"])
+            self.assertNotIn(".codex", output["target_home"])
 
 
 if __name__ == "__main__":
