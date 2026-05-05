@@ -1,11 +1,13 @@
 # codex-environment-backup
 
-Offline backup, restore, and health checks for a local Codex environment.
+Offline backup, restore, and health checks for local Codex and Claude Code
+environments. The `--profile codex|claude-code` flag selects which environment
+to operate on; Codex is the default.
 
-This tool is designed to be operated by Codex through natural language. The
-Python CLI is the deterministic implementation layer and remains available for
-advanced users, automation, smoke tests, and recovery when Codex itself is
-unavailable.
+This tool is designed to be operated by Codex or Claude Code through natural
+language. The Python CLI is the deterministic implementation layer and remains
+available for advanced users, automation, smoke tests, and recovery when the
+agent itself is unavailable.
 
 [中文说明](#chinese) · [Install](#install) · [Daily Use](#daily-use) · [Restore](#restore) · [Update](#update) · [Uninstall](#uninstall) · [Safety](#safety-model) · [Advanced CLI](#advanced-cli)
 
@@ -170,6 +172,9 @@ the current Python environment, `doctor` records safe `status` / `doctor`
 summaries without printing provider URLs, local state paths, or full integration
 stdout. If it is not available, the integration is skipped.
 
+The package module is `agent_environment_backup`. A thin `codex_environment_backup`
+compatibility shim forwards to the new module so existing scripts keep working.
+
 ## Update
 
 Paste this into Codex:
@@ -229,16 +234,25 @@ Use Python 3.11 or newer. Prefer `python3` when it exists; on Windows, `python`
 is acceptable when it points to Python 3.11+.
 
 ```powershell
-python -m codex_environment_backup doctor
-python -m codex_environment_backup doctor --run-commands
-python -m codex_environment_backup backup
-python -m codex_environment_backup list-backups
-python -m codex_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz
-python -m codex_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz --apply --i-understand-this-restores-sensitive-codex-state
+# Codex (default profile)
+python -m agent_environment_backup doctor
+python -m agent_environment_backup doctor --run-commands
+python -m agent_environment_backup backup
+python -m agent_environment_backup list-backups
+python -m agent_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz
+python -m agent_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz --apply --i-understand-this-restores-sensitive-codex-state
+
+# Claude Code profile
+python -m agent_environment_backup --profile claude-code doctor
+python -m agent_environment_backup --profile claude-code backup
+python -m agent_environment_backup --profile claude-code list-backups
 ```
 
 On systems where `python3` is the Python 3 command, replace `python` with
 `python3`.
+
+The `--profile` flag accepts `codex` (default) or `claude-code`. It controls
+which agent home directory, backup location, and naming conventions are used.
 
 `doctor` is structural by default. Add `--run-commands` for explicit
 command-level probes such as `codex --version`, `codex mcp list`, and optional
@@ -409,14 +423,22 @@ CLI 留给高级用户、CI、smoke test、自动化和 Codex 自身不可用时
 不应要求用户手动运行命令。
 
 ```powershell
-python -m codex_environment_backup doctor
-python -m codex_environment_backup doctor --run-commands
-python -m codex_environment_backup backup
-python -m codex_environment_backup list-backups
-python -m codex_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz
-python -m codex_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz --apply --i-understand-this-restores-sensitive-codex-state
-python -m codex_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz --apply --i-understand-this-restores-sensitive-codex-state --run-post-restore-commands
+# Codex（默认 profile）
+python -m agent_environment_backup doctor
+python -m agent_environment_backup doctor --run-commands
+python -m agent_environment_backup backup
+python -m agent_environment_backup list-backups
+python -m agent_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz
+python -m agent_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz --apply --i-understand-this-restores-sensitive-codex-state
+python -m agent_environment_backup restore --archive C:\path\to\codex-backup-YYYYMMDD-HHMMSS.tar.gz --apply --i-understand-this-restores-sensitive-codex-state --run-post-restore-commands
+
+# Claude Code profile
+python -m agent_environment_backup --profile claude-code doctor
+python -m agent_environment_backup --profile claude-code backup
+python -m agent_environment_backup --profile claude-code list-backups
 ```
+
+`--profile` 接受 `codex`（默认）或 `claude-code`，决定操作哪个 agent 的 home 目录、备份位置和命名约定。
 
 `doctor` 默认只做结构体检。确实需要命令级探测 `codex --version`、`codex mcp list` 和可选集成时，
 再加 `--run-commands`。

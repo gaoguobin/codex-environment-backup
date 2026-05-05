@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Offline backup, restore, and health-check tool for local Codex environments. Designed to be driven by Codex via natural language; the Python CLI is the deterministic implementation layer.
+Offline backup, restore, and health-check tool for local Codex and Claude Code environments. The `--profile codex|claude-code` flag selects which environment to operate on. Designed to be driven by Codex or Claude Code via natural language; the Python CLI is the deterministic implementation layer.
 
 ## Commands
 
@@ -15,22 +15,28 @@ python -m unittest discover -s tests
 # Run a single test
 python -m unittest tests.test_core.CodexEnvironmentBackupTests.test_backup_creates_manifest_and_excludes_live_sqlite_sidecars
 
-# CLI smoke check
-python -m codex_environment_backup doctor
-python -m codex_environment_backup backup --help
+# CLI smoke check (Codex, default profile)
+python -m agent_environment_backup doctor
+python -m agent_environment_backup backup --help
+
+# CLI smoke check (Claude Code profile)
+python -m agent_environment_backup --profile claude-code doctor
+python -m agent_environment_backup --profile claude-code backup --help
 ```
 
 No build step, no linter configured, no type checker configured. Zero external dependencies — stdlib only.
 
 ## Architecture
 
-**Single-module package** under `src/codex_environment_backup/`:
+**Single-module package** under `src/agent_environment_backup/`:
 
-- `core.py` — All business logic. Four main operations: `doctor_codex_environment`, `create_backup`, `restore_backup`, `list_backups`. Each returns a dict that the CLI layer serializes to JSON. Also contains the embedded `RESTORE_STANDALONE_PY` string — a self-contained restore script included in every backup archive so users can restore without installing the package.
-- `cli.py` — argparse wrapper that calls core functions and prints JSON. No logic beyond argument parsing.
+- `core.py` — All business logic. Four main operations: `doctor_codex_environment`, `create_backup`, `restore_backup`, `list_backups`. Each returns a dict that the CLI layer serializes to JSON. Also contains the embedded `RESTORE_STANDALONE_PY` string — a self-contained restore script included in every backup archive so users can restore without installing the package. The `EnvironmentProfile` abstraction encapsulates per-agent differences (home directory, backup location, naming conventions) so each operation is profile-aware without scattered if/else branches.
+- `cli.py` — argparse wrapper that calls core functions and prints JSON. Adds `--profile codex|claude-code` as a top-level flag. No logic beyond argument parsing and profile selection.
 - `__init__.py` — Re-exports core public API and `__version__`.
 
-**Skill integration** (`skills/codex-environment-backup/`):
+A thin compatibility shim at `src/codex_environment_backup/` forwards imports and `python -m codex_environment_backup` to the new module.
+
+**Skill integration** (`skills/codex-environment-backup/` and `skills/claude-code-environment-backup/`):
 
 - `SKILL.md` — Codex skill definition with trigger patterns, workflow instructions, and safety model. This is the natural-language contract between the user and Codex.
 - `agents/openai.yaml` — OpenAI agent metadata (display name, default prompt).
