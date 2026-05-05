@@ -31,11 +31,10 @@ Run the CLI as the source of truth:
 
 Resolve the Claude Code home directory in this order:
 
-1. User-provided `--codex-home`
-2. `CODEX_HOME` environment variable
-3. `~/.claude`
+1. User-provided `--home`
+2. `~/.claude`
 
-Use `--backup-root <path>` when the user names a backup destination. Otherwise use the CLI default `~/Documents/CodexBackups`.
+Use `--backup-root <path>` when the user names a backup destination. Otherwise use the CLI default `~/Documents/ClaudeCodeBackups`.
 
 ## Backup workflow
 
@@ -64,9 +63,9 @@ Hard boundary: if applying to the same Claude Code home directory (`~/.claude`) 
 
 - If the user has a backup directory, point them to `RESTORE.md` and the platform helper in that directory. Use `RESTORE_INSTRUCTIONS.txt` as a plain-text fallback.
 - If the user has a backup archive, tell them to extract it first, open `RESTORE.md` or `RESTORE_INSTRUCTIONS.txt`, close Claude Code, and run the platform helper.
-- On Windows, the normal non-command handoff is double-clicking `restore-codex-environment.cmd`.
-- On macOS, the normal non-command handoff is opening `restore-codex-environment.command`.
-- On Linux, use `restore-codex-environment.sh`.
+- On Windows, the normal non-command handoff is double-clicking `restore-environment.cmd`.
+- On macOS, the normal non-command handoff is opening `restore-environment.command`.
+- On Linux, use `restore-environment.sh`.
 
 Provide the exact CLI handoff only for advanced users or when the restore helper is missing.
 

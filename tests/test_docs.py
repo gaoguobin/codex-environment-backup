@@ -70,6 +70,16 @@ class DocumentationShapeTests(unittest.TestCase):
         self.assertIn("Claude Code", skill)
         self.assertNotIn("codex_environment_backup", skill)
 
+    def test_claude_code_skill_has_no_codex_leftovers(self) -> None:
+        skill = self.read("skills/claude-code-environment-backup/SKILL.md")
+        self.assertNotIn("--codex-home", skill)
+        self.assertNotIn("CODEX_HOME", skill)
+        self.assertNotIn("CodexBackups", skill)
+        self.assertNotIn("restore-codex-environment", skill)
+        self.assertIn("ClaudeCodeBackups", skill)
+        self.assertIn("restore-environment.", skill)
+        self.assertIn("--home", skill)
+
     def test_codex_skill_uses_new_module_name(self) -> None:
         skill = self.read("skills/codex-environment-backup/SKILL.md")
         self.assertIn("agent_environment_backup", skill)
