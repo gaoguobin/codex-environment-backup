@@ -1572,13 +1572,16 @@ def restore_backup(
     codex_home: str | os.PathLike[str] | None = None,
     *,
     backup_root: str | os.PathLike[str] | None = None,
+    profile: EnvironmentProfile | None = None,
     apply: bool = False,
     confirm: bool = False,
     archive_format: str = "tar.gz",
     run_post_restore_commands: bool = False,
 ) -> dict[str, Any]:
-    home = resolve_codex_home(codex_home)
-    root = Path(backup_root).expanduser().resolve() if backup_root else default_backup_root()
+    if profile is None:
+        profile = CODEX_PROFILE
+    home = resolve_home(profile, codex_home)
+    root = Path(backup_root).expanduser().resolve() if backup_root else default_backup_root(profile)
     source_path = Path(source).expanduser().resolve()
     source_is_dir = source_path.is_dir()
     with open_backup_source(source_path, root) as backup_dir:
@@ -1611,7 +1614,7 @@ def restore_backup(
                 "sqlite_databases": manifest.get("counts", {}).get("sqlite_databases"),
             },
             "restore_kit": restore_kit,
-            "sensitive_note": SENSITIVE_NOTE,
+            "sensitive_note": _make_sensitive_note(profile.display_name),
         }
         if not apply:
             result["message"] = (
@@ -1629,8 +1632,9 @@ def restore_backup(
             pre_restore = create_backup(
                 home,
                 backup_root=root,
+                profile=profile,
                 archive_format=archive_format,
-                timestamp=local_timestamp("pre-restore-codex-backup"),
+                timestamp=local_timestamp(profile.pre_restore_prefix),
                 run_doctor_commands=False,
             )
             if not pre_restore.get("ok"):
@@ -1656,7 +1660,7 @@ def restore_backup(
             home.mkdir(parents=True, exist_ok=True)
 
         copy_result = copy_backup_files(backup_dir, home)
-        post_doctor = doctor_codex_environment(home, run_commands=run_post_restore_commands)
+        post_doctor = doctor_environment(home, profile=profile, run_commands=run_post_restore_commands)
         result.update(
             {
                 "pre_restore_backup": pre_restore,
@@ -1717,6 +1721,7 @@ def backup_list_item(manifest: Path, data: dict[str, Any]) -> dict[str, Any]:
         "backup_dir": str(manifest.parent),
         "status": status,
         "schema_version": schema_label,
+        "profile": data.get("profile"),
         "created_at": data.get("created_at") or data.get("generated_at"),
         "files": files,
         "sqlite_databases": sqlite_databases,
@@ -1742,8 +1747,12 @@ def backup_list_item(manifest: Path, data: dict[str, Any]) -> dict[str, Any]:
 
 def list_backups(
     backup_root: str | os.PathLike[str] | None = None,
+    *,
+    profile: EnvironmentProfile | None = None,
 ) -> dict[str, Any]:
-    root = Path(backup_root).expanduser().resolve() if backup_root else default_backup_root()
+    if profile is None:
+        profile = CODEX_PROFILE
+    root = Path(backup_root).expanduser().resolve() if backup_root else default_backup_root(profile)
     items: list[dict[str, Any]] = []
     if not root.exists():
         return {"ok": True, "backup_root": str(root), "backups": items}

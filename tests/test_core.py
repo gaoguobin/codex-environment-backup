@@ -651,6 +651,49 @@ service_tier = "auto"
             self.assertIn("credentials.json", paths)
             self.assertIn("data.sqlite", paths)
 
+    def test_restore_claude_code_profile_dry_run_and_apply(self) -> None:
+        from codex_environment_backup.core import (
+            create_backup, restore_backup, list_backups, CLAUDE_CODE_PROFILE,
+        )
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            source_home = self.make_claude_code_home(root)
+            backup_result = create_backup(
+                source_home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-code-backup-test",
+                run_doctor_commands=False,
+            )
+            archive = Path(backup_result["archive"])
+
+            dry_run = restore_backup(archive, root / "dry-target", profile=CLAUDE_CODE_PROFILE)
+            self.assertTrue(dry_run["dry_run"])
+            self.assertFalse((root / "dry-target").exists())
+
+            target = root / "restored-claude"
+            target.mkdir()
+            (target / "settings.json").write_text('{"old":true}', encoding="utf-8")
+            result = restore_backup(
+                archive,
+                target,
+                backup_root=root / "prebacks",
+                profile=CLAUDE_CODE_PROFILE,
+                apply=True,
+                confirm=True,
+            )
+            self.assertTrue(result["ok"], result)
+            self.assertTrue(result["pre_restore_backup"])
+            restored_settings = json.loads(
+                (target / "settings.json").read_text(encoding="utf-8")
+            )
+            self.assertIn("model", restored_settings)
+
+            listing = list_backups(root / "backups", profile=CLAUDE_CODE_PROFILE)
+            self.assertTrue(any(
+                item.get("status") == "ok" for item in listing["backups"]
+            ))
+
     def test_cli_doctor_is_structural_by_default(self) -> None:
         from codex_environment_backup.cli import build_parser
 
