@@ -708,6 +708,36 @@ service_tier = "auto"
         self.assertTrue(args.run_commands)
         self.assertFalse(args.no_run_commands)
 
+    def test_cli_profile_argument_default(self) -> None:
+        from codex_environment_backup.cli import build_parser
+        args = build_parser().parse_args(["doctor"])
+        self.assertEqual(args.profile, "codex")
+
+    def test_cli_profile_argument_claude_code(self) -> None:
+        from codex_environment_backup.cli import build_parser
+        args = build_parser().parse_args(["--profile", "claude-code", "doctor"])
+        self.assertEqual(args.profile, "claude-code")
+
+    def test_cli_home_argument_and_codex_home_alias(self) -> None:
+        from codex_environment_backup.cli import build_parser
+        args = build_parser().parse_args(["doctor", "--home", "/tmp/test"])
+        self.assertEqual(args.home, "/tmp/test")
+        args2 = build_parser().parse_args(["doctor", "--codex-home", "/tmp/test2"])
+        self.assertEqual(args2.home, "/tmp/test2")
+
+    def test_cli_restore_confirm_flag_and_alias(self) -> None:
+        from codex_environment_backup.cli import build_parser
+        args = build_parser().parse_args([
+            "restore", "--archive", "/tmp/a.tar.gz",
+            "--apply", "--i-understand-this-restores-sensitive-state",
+        ])
+        self.assertTrue(args.confirm)
+        args2 = build_parser().parse_args([
+            "restore", "--archive", "/tmp/a.tar.gz",
+            "--apply", "--i-understand-this-restores-sensitive-codex-state",
+        ])
+        self.assertTrue(args2.confirm)
+
     def test_restore_kit_uses_profile_display_name(self) -> None:
         from codex_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
         with self.temp_root() as temp_dir:

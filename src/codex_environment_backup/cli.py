@@ -5,9 +5,10 @@ import json
 import sys
 
 from .core import (
+    PROFILES,
     BackupError,
     create_backup,
-    doctor_codex_environment,
+    doctor_environment,
     list_backups,
     restore_backup,
 )
@@ -22,10 +23,17 @@ def build_parser() -> argparse.ArgumentParser:
         prog="codex-environment-backup",
         description="Back up, restore, and inspect a local Codex environment.",
     )
+    parser.add_argument(
+        "--profile",
+        choices=list(PROFILES.keys()),
+        default="codex",
+        help="Environment profile. Default: codex.",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     backup = subparsers.add_parser("backup", help="Create an offline Codex backup")
-    backup.add_argument("--codex-home", help="Codex home path. Defaults to CODEX_HOME or ~/.codex.")
+    backup.add_argument("--home", "--codex-home", dest="home",
+                        help="Environment home path. Defaults to profile default.")
     backup.add_argument("--backup-root", help="Directory where backups are stored.")
     backup.add_argument("--format", choices=["tar.gz", "zip"], default="tar.gz")
     backup.add_argument("--no-archive", action="store_true", help="Create only the backup directory.")
@@ -37,11 +45,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     restore = subparsers.add_parser("restore", help="Dry-run or apply a Codex restore")
     restore.add_argument("--archive", required=True, help="Backup archive or backup directory.")
-    restore.add_argument("--codex-home", help="Codex home path. Defaults to CODEX_HOME or ~/.codex.")
+    restore.add_argument("--home", "--codex-home", dest="home",
+                         help="Environment home path. Defaults to profile default.")
     restore.add_argument("--backup-root", help="Directory for the mandatory pre-restore backup.")
     restore.add_argument("--format", choices=["tar.gz", "zip"], default="tar.gz")
     restore.add_argument("--apply", action="store_true", help="Apply restore. Default is dry-run.")
     restore.add_argument(
+        "--i-understand-this-restores-sensitive-state",
         "--i-understand-this-restores-sensitive-codex-state",
         action="store_true",
         dest="confirm",
@@ -54,7 +64,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     doctor = subparsers.add_parser("doctor", help="Inspect Codex environment health")
-    doctor.add_argument("--codex-home", help="Codex home path. Defaults to CODEX_HOME or ~/.codex.")
+    doctor.add_argument("--home", "--codex-home", dest="home",
+                        help="Environment home path. Defaults to profile default.")
     doctor.add_argument(
         "--no-run-commands",
         action="store_true",
@@ -76,11 +87,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    profile = PROFILES[args.profile]
+
     try:
         if args.command == "backup":
             result = create_backup(
-                args.codex_home,
+                args.home,
                 backup_root=args.backup_root,
+                profile=profile,
                 archive_format=args.format,
                 make_archive=not args.no_archive,
                 run_doctor_commands=not args.no_doctor_commands,
@@ -90,8 +104,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "restore":
             result = restore_backup(
                 args.archive,
-                args.codex_home,
+                args.home,
                 backup_root=args.backup_root,
+                profile=profile,
                 apply=args.apply,
                 confirm=args.confirm,
                 archive_format=args.format,
@@ -102,14 +117,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "doctor":
             if args.run_commands and args.no_run_commands:
                 parser.error("doctor accepts only one of --run-commands or --no-run-commands")
-            result = doctor_codex_environment(
-                args.codex_home,
+            result = doctor_environment(
+                args.home,
+                profile=profile,
                 run_commands=args.run_commands,
             )
             emit_json(result)
             return 0 if result.get("ok") else 1
         if args.command == "list-backups":
-            emit_json(list_backups(args.backup_root))
+            emit_json(list_backups(args.backup_root, profile=profile))
             return 0
     except BackupError as exc:
         emit_json({"ok": False, "error": str(exc)})
