@@ -113,10 +113,10 @@ service_tier = "auto"
                 names = {Path(member.name).name for member in archive.getmembers()}
             self.assertIn("RESTORE.md", names)
             self.assertIn("RESTORE_INSTRUCTIONS.txt", names)
-            self.assertIn("restore-codex-environment.cmd", names)
-            self.assertIn("restore-codex-environment.ps1", names)
-            self.assertIn("restore-codex-environment.command", names)
-            self.assertIn("restore-codex-environment.sh", names)
+            self.assertIn("restore-environment.cmd", names)
+            self.assertIn("restore-environment.ps1", names)
+            self.assertIn("restore-environment.command", names)
+            self.assertIn("restore-environment.sh", names)
             self.assertIn("restore-standalone.py", names)
             standalone = subprocess.run(
                 [
@@ -156,16 +156,16 @@ service_tier = "auto"
                 check=False,
             )
             self.assertEqual(standalone_apply.returncode, 0, standalone_apply.stderr)
-            pre_restore_dirs = sorted(standalone_prebacks.glob("pre-restore-codex-backup-*"))
+            pre_restore_dirs = sorted(standalone_prebacks.glob("pre-restore-backup-*"))
             self.assertTrue(pre_restore_dirs, standalone_apply.stdout)
             pre_restore_dir = pre_restore_dirs[0]
             for helper_name in (
                 "RESTORE.md",
                 "RESTORE_INSTRUCTIONS.txt",
-                "restore-codex-environment.cmd",
-                "restore-codex-environment.ps1",
-                "restore-codex-environment.command",
-                "restore-codex-environment.sh",
+                "restore-environment.cmd",
+                "restore-environment.ps1",
+                "restore-environment.command",
+                "restore-environment.sh",
                 "restore-standalone.py",
             ):
                 self.assertTrue((pre_restore_dir / helper_name).exists(), helper_name)
@@ -707,6 +707,31 @@ service_tier = "auto"
         args = build_parser().parse_args(["doctor", "--run-commands"])
         self.assertTrue(args.run_commands)
         self.assertFalse(args.no_run_commands)
+
+    def test_restore_kit_uses_profile_display_name(self) -> None:
+        from codex_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            result = create_backup(
+                home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-code-kit-test",
+                run_doctor_commands=False,
+            )
+            backup_dir = Path(result["backup_dir"])
+            restore_md = (backup_dir / "RESTORE.md").read_text(encoding="utf-8")
+            instructions = (backup_dir / "RESTORE_INSTRUCTIONS.txt").read_text(encoding="utf-8")
+            self.assertIn("Claude Code", restore_md)
+            self.assertIn("Claude Code", instructions)
+            self.assertNotIn("Codex", restore_md)
+            self.assertNotIn("Codex", instructions)
+            self.assertTrue((backup_dir / "restore-environment.cmd").exists())
+            self.assertTrue((backup_dir / "restore-environment.ps1").exists())
+            self.assertTrue((backup_dir / "restore-environment.command").exists())
+            self.assertTrue((backup_dir / "restore-environment.sh").exists())
+            self.assertFalse((backup_dir / "restore-codex-environment.cmd").exists())
 
 
 if __name__ == "__main__":

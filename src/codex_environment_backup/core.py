@@ -688,72 +688,72 @@ def write_environment_snapshot(path: Path, doctor_report: dict[str, Any]) -> Non
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def restore_kit_instructions() -> str:
+def restore_kit_instructions(display_name: str = "Codex") -> str:
     return dedent(
-        """
-        Codex environment restore kit
+        f"""
+        {display_name} environment restore kit
 
         This folder contains a restore helper for people who do not want to type CLI commands.
 
         Windows:
-          1. Close the Codex App that uses this environment.
-          2. Double-click restore-codex-environment.cmd.
+          1. Close the {display_name} app that uses this environment.
+          2. Double-click restore-environment.cmd.
           3. Confirm the prompt.
 
         macOS:
-          1. Close the Codex App that uses this environment.
-          2. Double-click restore-codex-environment.command.
+          1. Close the {display_name} app that uses this environment.
+          2. Double-click restore-environment.command.
           3. Confirm the prompt.
 
         Linux:
-          1. Close the Codex App that uses this environment.
-          2. Run restore-codex-environment.sh from a terminal.
+          1. Close the {display_name} app that uses this environment.
+          2. Run restore-environment.sh from a terminal.
           3. Confirm the prompt.
 
-        The restore helper creates a pre-restore backup before it overwrites CODEX_HOME.
+        The restore helper creates a pre-restore backup before it overwrites the environment home directory.
         """
     ).strip() + "\n"
 
 
-def restore_kit_markdown() -> str:
+def restore_kit_markdown(display_name: str = "Codex") -> str:
     return dedent(
-        """
-        # Codex Environment Restore
+        f"""
+        # {display_name} Environment Restore
 
         This backup includes a restore kit for users who do not want to type CLI commands.
 
         ## Before Restoring
 
-        - Close the Codex App that uses this environment.
+        - Close the {display_name} app that uses this environment.
         - Keep this backup local unless you have reviewed its contents.
-        - The restore helper creates a pre-restore backup before overwriting `CODEX_HOME`.
+        - The restore helper creates a pre-restore backup before overwriting the environment home directory.
 
         ## Windows
 
         1. Extract the backup archive if needed.
-        2. Double-click `restore-codex-environment.cmd`.
+        2. Double-click `restore-environment.cmd`.
         3. Type `RESTORE` when prompted.
 
         ## macOS
 
         1. Extract the backup archive if needed.
-        2. Open `restore-codex-environment.command`.
+        2. Open `restore-environment.command`.
         3. Type `RESTORE` when prompted.
 
         ## Linux
 
         1. Extract the backup archive if needed.
-        2. Run `restore-codex-environment.sh`.
+        2. Run `restore-environment.sh`.
         3. Type `RESTORE` when prompted.
 
         ## Files
 
         - `RESTORE.md`: Markdown restore guide.
         - `RESTORE_INSTRUCTIONS.txt`: Plain-text restore guide.
-        - `restore-codex-environment.cmd`: Windows double-click restore entry.
-        - `restore-codex-environment.ps1`: Windows PowerShell restore script.
-        - `restore-codex-environment.command`: macOS restore entry.
-        - `restore-codex-environment.sh`: Linux restore entry.
+        - `restore-environment.cmd`: Windows double-click restore entry.
+        - `restore-environment.ps1`: Windows PowerShell restore script.
+        - `restore-environment.command`: macOS restore entry.
+        - `restore-environment.sh`: Linux restore entry.
         - `restore-standalone.py`: Self-contained restore implementation.
         """
     ).strip() + "\n"
@@ -780,9 +780,9 @@ RESTORE_STANDALONE_PY = dedent(
     EXCLUDED_DIR_NAMES = {".sandbox", ".sandbox-bin", ".sandbox-secrets", ".tmp", "tmp"}
     LIVE_SQLITE_SUFFIXES = (".sqlite-wal", ".sqlite-shm", "-wal", "-shm")
 
-    def resolve_codex_home(codex_home: str | None = None) -> Path:
-        if codex_home:
-            return Path(codex_home).expanduser().resolve()
+    def resolve_target_home(target_home: str | None = None) -> Path:
+        if target_home:
+            return Path(target_home).expanduser().resolve()
         env_home = os.environ.get("CODEX_HOME")
         if env_home:
             return Path(env_home).expanduser().resolve()
@@ -913,54 +913,54 @@ RESTORE_STANDALONE_PY = dedent(
 
     def restore_kit_markdown() -> str:
         return dedent('''
-        # Codex Environment Restore
+        # Environment Restore
 
-        This backup includes a restore helper for users who do not want to type CLI commands.
+        This backup includes a restore kit for users who do not want to type CLI commands.
 
         ## Before Restoring
 
-        - Close the Codex App that uses this environment.
+        - Close the app that uses this environment.
         - Keep this backup local unless you have reviewed its contents.
-        - The restore helper creates a pre-restore backup before overwriting `CODEX_HOME`.
+        - The restore helper creates a pre-restore backup before overwriting the environment home directory.
 
         ## Windows
 
         1. Extract the backup archive if needed.
-        2. Double-click `restore-codex-environment.cmd`.
+        2. Double-click `restore-environment.cmd`.
         3. Type `RESTORE` when prompted.
 
         ## macOS
 
         1. Extract the backup archive if needed.
-        2. Open `restore-codex-environment.command`.
+        2. Open `restore-environment.command`.
         3. Type `RESTORE` when prompted.
 
         ## Linux
 
         1. Extract the backup archive if needed.
-        2. Run `restore-codex-environment.sh`.
+        2. Run `restore-environment.sh`.
         3. Type `RESTORE` when prompted.
         ''').strip() + "\n"
 
     def restore_kit_instructions() -> str:
         return dedent('''
-        Codex environment restore kit
+        Environment restore kit
 
         This folder contains a restore helper for people who do not want to type CLI commands.
 
         Windows:
-          1. Close the Codex App that uses this environment.
-          2. Double-click restore-codex-environment.cmd.
+          1. Close the app that uses this environment.
+          2. Double-click restore-environment.cmd.
           3. Confirm the prompt.
 
         macOS:
-          1. Close the Codex App that uses this environment.
-          2. Double-click restore-codex-environment.command.
+          1. Close the app that uses this environment.
+          2. Double-click restore-environment.command.
           3. Confirm the prompt.
 
         Linux:
-          1. Close the Codex App that uses this environment.
-          2. Run restore-codex-environment.sh from a terminal.
+          1. Close the app that uses this environment.
+          2. Run restore-environment.sh from a terminal.
           3. Confirm the prompt.
         ''').strip() + "\n"
 
@@ -969,10 +969,10 @@ RESTORE_STANDALONE_PY = dedent(
         (backup_dir / "RESTORE.md").write_text(restore_kit_markdown(), encoding="utf-8")
         (backup_dir / "RESTORE_INSTRUCTIONS.txt").write_text(restore_kit_instructions(), encoding="utf-8")
         (backup_dir / "restore-standalone.py").write_text(script_source, encoding="utf-8")
-        (backup_dir / "restore-codex-environment.ps1").write_text(dedent('''
+        (backup_dir / "restore-environment.ps1").write_text(dedent('''
         $ErrorActionPreference = 'Stop'
         $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-        Write-Host 'Close the Codex App that uses this environment before restoring.'
+        Write-Host 'Close the app that uses this environment before restoring.'
         $answer = Read-Host 'Type RESTORE to apply this backup'
         if ($answer -ne 'RESTORE') { exit 1 }
         $pythonCmd = $null
@@ -997,17 +997,17 @@ RESTORE_STANDALONE_PY = dedent(
         if (-not $pythonCmd) { throw 'Python 3.11+ is required to restore this backup.' }
         & $pythonCmd "$scriptRoot\\restore-standalone.py" --backup-dir $scriptRoot --apply --confirm
         ''').strip() + "\n", encoding="utf-8")
-        (backup_dir / "restore-codex-environment.cmd").write_text(dedent('''
+        (backup_dir / "restore-environment.cmd").write_text(dedent('''
         @echo off
         setlocal
         set "SCRIPT_DIR=%~dp0"
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%restore-codex-environment.ps1"
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%restore-environment.ps1"
         ''').strip() + "\n", encoding="utf-8")
         shell_script = dedent('''
         #!/bin/sh
         set -eu
         script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-        printf 'Close the Codex App that uses this environment before restoring.\n'
+        printf 'Close the app that uses this environment before restoring.\n'
         printf 'Type RESTORE to apply this backup: '
         read answer
         if [ "$answer" != "RESTORE" ]; then
@@ -1033,8 +1033,8 @@ RESTORE_STANDALONE_PY = dedent(
         fi
         "$python_cmd" "$script_dir/restore-standalone.py" --backup-dir "$script_dir" --apply --confirm
         ''').strip() + "\n"
-        command_path = backup_dir / "restore-codex-environment.command"
-        sh_path = backup_dir / "restore-codex-environment.sh"
+        command_path = backup_dir / "restore-environment.command"
+        sh_path = backup_dir / "restore-environment.sh"
         command_path.write_text(shell_script, encoding="utf-8")
         sh_path.write_text(shell_script, encoding="utf-8")
         for path in (command_path, sh_path):
@@ -1063,16 +1063,17 @@ RESTORE_STANDALONE_PY = dedent(
         return {"restored_files": restored, "skipped": skipped}
 
     def main(argv: list[str] | None = None) -> int:
-        parser = argparse.ArgumentParser(description="Restore a Codex environment backup.")
+        parser = argparse.ArgumentParser(description="Restore an environment backup.")
         parser.add_argument("--backup-dir", required=True)
-        parser.add_argument("--codex-home")
+        parser.add_argument("--target-home")
+        parser.add_argument("--codex-home", dest="target_home", help=argparse.SUPPRESS)
         parser.add_argument("--backup-root")
         parser.add_argument("--apply", action="store_true")
         parser.add_argument("--confirm", action="store_true")
         args = parser.parse_args(argv)
 
         backup_dir = Path(args.backup_dir).expanduser().resolve()
-        target_home = resolve_codex_home(args.codex_home)
+        target_home = resolve_target_home(args.target_home)
         backup_root = Path(args.backup_root).expanduser().resolve() if args.backup_root else default_backup_root()
 
         manifest_path = backup_dir / "manifest.json"
@@ -1084,7 +1085,7 @@ RESTORE_STANDALONE_PY = dedent(
             "ok": True,
             "dry_run": not args.apply,
             "backup_dir": str(backup_dir),
-            "target_codex_home": str(target_home),
+            "target_home": str(target_home),
             "source_manifest": {
                 "created_at": manifest.get("created_at"),
                 "backup_name": manifest.get("backup_name"),
@@ -1100,7 +1101,7 @@ RESTORE_STANDALONE_PY = dedent(
 
         pre_restore = None
         if target_home.exists():
-            pre_restore = create_backup(target_home, backup_root, "pre-restore-codex-backup")
+            pre_restore = create_backup(target_home, backup_root, "pre-restore-backup")
             if not pre_restore.get("ok"):
                 print(json.dumps({
                     "ok": False,
@@ -1110,7 +1111,7 @@ RESTORE_STANDALONE_PY = dedent(
                         "skipped": [],
                         "errors": [{
                             "error": "pre_restore_backup_failed",
-                            "message": "Restore aborted because the current CODEX_HOME could not be backed up completely.",
+                            "message": "Restore aborted because the current environment home could not be backed up completely.",
                         }],
                     },
                 }, indent=2))
@@ -1132,24 +1133,25 @@ RESTORE_STANDALONE_PY = dedent(
 ).lstrip()
 
 
-def write_restore_kit(backup_dir: Path) -> dict[str, str]:
+def write_restore_kit(backup_dir: Path, display_name: str = "Codex") -> dict[str, str]:
     restore_md = backup_dir / "RESTORE.md"
     instructions = backup_dir / "RESTORE_INSTRUCTIONS.txt"
     restore_py = backup_dir / "restore-standalone.py"
-    restore_ps1 = backup_dir / "restore-codex-environment.ps1"
-    restore_cmd = backup_dir / "restore-codex-environment.cmd"
-    restore_command = backup_dir / "restore-codex-environment.command"
-    restore_sh = backup_dir / "restore-codex-environment.sh"
+    restore_ps1 = backup_dir / "restore-environment.ps1"
+    restore_cmd = backup_dir / "restore-environment.cmd"
+    restore_command = backup_dir / "restore-environment.command"
+    restore_sh = backup_dir / "restore-environment.sh"
 
-    restore_md.write_text(restore_kit_markdown(), encoding="utf-8")
-    instructions.write_text(restore_kit_instructions(), encoding="utf-8")
+    restore_md.write_text(restore_kit_markdown(display_name), encoding="utf-8")
+    instructions.write_text(restore_kit_instructions(display_name), encoding="utf-8")
     restore_py.write_text(RESTORE_STANDALONE_PY, encoding="utf-8")
+    close_msg = f"Close the {display_name} app that uses this environment before restoring."
     restore_ps1.write_text(
         dedent(
             """
             $ErrorActionPreference = 'Stop'
             $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-            Write-Host 'Close the Codex App that uses this environment before restoring.'
+            Write-Host '__CLOSE_MSG__'
             $answer = Read-Host 'Type RESTORE to apply this backup'
             if ($answer -ne 'RESTORE') { exit 1 }
             $pythonCmd = $null
@@ -1174,7 +1176,7 @@ def write_restore_kit(backup_dir: Path) -> dict[str, str]:
             if (-not $pythonCmd) { throw 'Python 3.11+ is required to restore this backup.' }
             & $pythonCmd "$scriptRoot\\restore-standalone.py" --backup-dir $scriptRoot --apply --confirm
             """
-        ).strip()
+        ).strip().replace("__CLOSE_MSG__", close_msg)
         + "\n",
         encoding="utf-8",
     )
@@ -1184,7 +1186,7 @@ def write_restore_kit(backup_dir: Path) -> dict[str, str]:
             @echo off
             setlocal
             set "SCRIPT_DIR=%~dp0"
-            powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%restore-codex-environment.ps1"
+            powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%restore-environment.ps1"
             """
         ).strip()
         + "\n",
@@ -1196,7 +1198,7 @@ def write_restore_kit(backup_dir: Path) -> dict[str, str]:
             #!/bin/sh
             set -eu
             script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-            printf 'Close the Codex App that uses this environment before restoring.\n'
+            printf '__CLOSE_MSG__\n'
             printf 'Type RESTORE to apply this backup: '
             read answer
             if [ "$answer" != "RESTORE" ]; then
@@ -1222,7 +1224,7 @@ def write_restore_kit(backup_dir: Path) -> dict[str, str]:
             fi
             "$python_cmd" "$script_dir/restore-standalone.py" --backup-dir "$script_dir" --apply --confirm
             """
-        ).strip()
+        ).strip().replace("__CLOSE_MSG__", close_msg)
         + "\n",
         encoding="utf-8",
     )
@@ -1371,7 +1373,7 @@ def create_backup(
         f"SQLite databases: {manifest['counts']['sqlite_databases']}",
         f"Errors: {len(errors)}",
         f"Integrity: {'ok' if all(check.get('ok') for check in sqlite_checks) else 'failed'}",
-        "Restore kit: RESTORE.md, RESTORE_INSTRUCTIONS.txt, restore-codex-environment.cmd, restore-codex-environment.ps1, restore-codex-environment.command, restore-codex-environment.sh",
+        "Restore kit: RESTORE.md, RESTORE_INSTRUCTIONS.txt, restore-environment.cmd, restore-environment.ps1, restore-environment.command, restore-environment.sh",
         "",
         sensitive_note,
     ]
@@ -1379,7 +1381,7 @@ def create_backup(
         "\n".join(summary_lines) + "\n", encoding="utf-8"
     )
 
-    restore_kit = write_restore_kit(backup_dir)
+    restore_kit = write_restore_kit(backup_dir, profile.display_name)
 
     archive_path = None
     sha256_path = None
@@ -1592,10 +1594,10 @@ def restore_backup(
             restore_kit = {
                 "restore_md": str(backup_dir / "RESTORE.md"),
                 "instructions": str(backup_dir / "RESTORE_INSTRUCTIONS.txt"),
-                "restore_cmd": str(backup_dir / "restore-codex-environment.cmd"),
-                "restore_command": str(backup_dir / "restore-codex-environment.command"),
-                "restore_sh": str(backup_dir / "restore-codex-environment.sh"),
-                "restore_ps1": str(backup_dir / "restore-codex-environment.ps1"),
+                "restore_cmd": str(backup_dir / "restore-environment.cmd"),
+                "restore_command": str(backup_dir / "restore-environment.command"),
+                "restore_sh": str(backup_dir / "restore-environment.sh"),
+                "restore_ps1": str(backup_dir / "restore-environment.ps1"),
             }
         else:
             restore_kit = {
