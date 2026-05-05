@@ -48,6 +48,21 @@ class DocumentationShapeTests(unittest.TestCase):
         self.assertIn("for candidate in python3 python", uninstall)
 
 
+    def test_claude_code_lifecycle_docs_exist(self) -> None:
+        for name in ("INSTALL.md", "UPDATE.md"):
+            content = self.read(f".claude/{name}")
+            self.assertIn("agent_environment_backup", content)
+            self.assertIn("--profile claude-code", content)
+            self.assertIn("Claude Code", content)
+        uninstall = self.read(".claude/UNINSTALL.md")
+        self.assertIn("Claude Code", uninstall)
+        self.assertIn("agent-environment-backup", uninstall)
+
+    def test_codex_lifecycle_docs_use_new_module(self) -> None:
+        for name in ("INSTALL.md", "UPDATE.md"):
+            content = self.read(f".codex/{name}")
+            self.assertIn("agent_environment_backup", content)
+
     def test_claude_code_skill_exists_and_has_profile(self) -> None:
         skill = self.read("skills/claude-code-environment-backup/SKILL.md")
         self.assertIn("--profile claude-code", skill)

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m unittest discover -s tests -v)",
+      "Bash(python -m unittest tests.test_core.CodexEnvironmentBackupTests.test_inspect_claude_code_config tests.test_core.CodexEnvironmentBackupTests.test_inspect_claude_code_config_missing)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(python -m unittest tests.test_core.CodexEnvironmentBackupTests.test_doctor_claude_code_profile_structural -v)",
+      "Bash(python -m unittest tests.test_core.CodexEnvironmentBackupTests.test_backup_claude_code_profile -v)",
+      "Bash(python *)",
+      "Bash(PYTHONPATH=src python -m agent_environment_backup --help)",
+      "Bash(PYTHONPATH=src python -m codex_environment_backup --help)"
+    ]
+  }
+}
