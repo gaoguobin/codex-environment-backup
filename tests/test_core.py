@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -521,6 +522,38 @@ service_tier = "auto"
         self.assertIsNone(CLAUDE_CODE_PROFILE.env_home_var)
         self.assertEqual(CODEX_PROFILE.backup_prefix, "codex-backup")
         self.assertEqual(CLAUDE_CODE_PROFILE.backup_prefix, "claude-code-backup")
+
+    def test_resolve_home_uses_profile_default(self) -> None:
+        from codex_environment_backup.core import resolve_home, CODEX_PROFILE, CLAUDE_CODE_PROFILE
+        env_without_codex_home = {k: v for k, v in os.environ.items() if k != "CODEX_HOME"}
+        with mock.patch.dict(os.environ, env_without_codex_home, clear=True):
+            codex_home = resolve_home(CODEX_PROFILE)
+            claude_home = resolve_home(CLAUDE_CODE_PROFILE)
+        self.assertEqual(codex_home, (Path.home() / ".codex").resolve())
+        self.assertEqual(claude_home, (Path.home() / ".claude").resolve())
+
+    def test_resolve_home_respects_env_var(self) -> None:
+        from codex_environment_backup.core import resolve_home, CODEX_PROFILE, CLAUDE_CODE_PROFILE
+        with mock.patch.dict(os.environ, {"CODEX_HOME": "/tmp/custom-codex"}):
+            result = resolve_home(CODEX_PROFILE)
+        self.assertEqual(result, Path("/tmp/custom-codex").resolve())
+        env_without_codex_home = {k: v for k, v in os.environ.items() if k != "CODEX_HOME"}
+        with mock.patch.dict(os.environ, env_without_codex_home, clear=True):
+            result = resolve_home(CLAUDE_CODE_PROFILE)
+        self.assertEqual(result, (Path.home() / ".claude").resolve())
+
+    def test_resolve_home_override_takes_precedence(self) -> None:
+        from codex_environment_backup.core import resolve_home, CODEX_PROFILE
+        with mock.patch.dict(os.environ, {"CODEX_HOME": "/tmp/env"}):
+            result = resolve_home(CODEX_PROFILE, "/tmp/explicit")
+        self.assertEqual(result, Path("/tmp/explicit").resolve())
+
+    def test_default_backup_root_uses_profile(self) -> None:
+        from codex_environment_backup.core import default_backup_root, CODEX_PROFILE, CLAUDE_CODE_PROFILE
+        codex_root = default_backup_root(CODEX_PROFILE)
+        claude_root = default_backup_root(CLAUDE_CODE_PROFILE)
+        self.assertTrue(str(codex_root).endswith("CodexBackups"))
+        self.assertTrue(str(claude_root).endswith("ClaudeCodeBackups"))
 
     def test_cli_doctor_is_structural_by_default(self) -> None:
         from codex_environment_backup.cli import build_parser

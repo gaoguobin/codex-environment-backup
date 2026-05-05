@@ -131,17 +131,25 @@ def local_timestamp(prefix: str = "codex-backup") -> str:
     return f"{prefix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
 
+def resolve_home(
+    profile: EnvironmentProfile = CODEX_PROFILE,
+    home_override: str | os.PathLike[str] | None = None,
+) -> Path:
+    if home_override:
+        return Path(home_override).expanduser().resolve()
+    if profile.env_home_var is not None:
+        env_home = os.environ.get(profile.env_home_var)
+        if env_home:
+            return Path(env_home).expanduser().resolve()
+    return (Path.home() / profile.default_home_dir).resolve()
+
+
 def resolve_codex_home(codex_home: str | os.PathLike[str] | None = None) -> Path:
-    if codex_home:
-        return Path(codex_home).expanduser().resolve()
-    env_home = os.environ.get("CODEX_HOME")
-    if env_home:
-        return Path(env_home).expanduser().resolve()
-    return (Path.home() / ".codex").resolve()
+    return resolve_home(CODEX_PROFILE, codex_home)
 
 
-def default_backup_root() -> Path:
-    return (Path.home() / "Documents" / "CodexBackups").resolve()
+def default_backup_root(profile: EnvironmentProfile = CODEX_PROFILE) -> Path:
+    return (Path.home() / "Documents" / profile.default_backup_subdir).resolve()
 
 
 def is_relative_to(child: Path, parent: Path) -> bool:
@@ -156,9 +164,13 @@ def normalize_relative(path: Path) -> str:
     return path.as_posix()
 
 
-def is_excluded(relative_path: Path) -> bool:
+def is_excluded(
+    relative_path: Path,
+    extra_excluded_dirs: frozenset[str] = frozenset(),
+) -> bool:
+    excluded = EXCLUDED_DIR_NAMES | extra_excluded_dirs
     parts = [part.lower() for part in relative_path.parts if part not in ("", ".")]
-    if any(part in EXCLUDED_DIR_NAMES for part in parts):
+    if any(part in excluded for part in parts):
         return True
     name = relative_path.name.lower()
     return name.endswith(LIVE_SQLITE_SUFFIXES)
