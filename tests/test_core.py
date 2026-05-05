@@ -774,5 +774,36 @@ service_tier = "auto"
             self.assertFalse((backup_dir / "restore-codex-environment.cmd").exists())
 
 
+    def test_list_backups_annotates_profile(self) -> None:
+        from agent_environment_backup.core import (
+            create_backup, list_backups, CODEX_PROFILE, CLAUDE_CODE_PROFILE,
+        )
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            backup_root = root / "shared-backups"
+            codex_home = self.make_home(root)
+            claude_home = self.make_claude_code_home(root)
+            create_backup(
+                codex_home,
+                backup_root=backup_root,
+                profile=CODEX_PROFILE,
+                timestamp="codex-test",
+                run_doctor_commands=False,
+            )
+            create_backup(
+                claude_home,
+                backup_root=backup_root,
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-test",
+                run_doctor_commands=False,
+            )
+            listing = list_backups(backup_root)
+            profiles_found = {
+                item.get("profile") for item in listing["backups"]
+            }
+            self.assertIn("codex", profiles_found)
+            self.assertIn("claude-code", profiles_found)
+
+
 if __name__ == "__main__":
     unittest.main()

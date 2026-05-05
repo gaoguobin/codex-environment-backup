@@ -11,6 +11,8 @@ dist/
 test_tmp_runtime/
 codex-backup-*/
 pre-restore-codex-backup-*/
+claude-code-backup-*/
+pre-restore-claude-code-backup-*/
 *.tar.gz
 *.zip
 *.sha256
