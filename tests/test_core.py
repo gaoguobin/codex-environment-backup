@@ -555,6 +555,39 @@ service_tier = "auto"
         self.assertTrue(str(codex_root).endswith("CodexBackups"))
         self.assertTrue(str(claude_root).endswith("ClaudeCodeBackups"))
 
+    def test_inspect_claude_code_config(self) -> None:
+        from codex_environment_backup.core import inspect_claude_code_config
+        with self.temp_root() as temp_dir:
+            home = Path(temp_dir) / "claude-home"
+            home.mkdir()
+            settings = {
+                "permissions": {"allow": ["Bash(git *)"]},
+                "env": {"DEBUG": "1"},
+                "hooks": {"afterToolCall": [{"command": "echo done"}]},
+                "model": "claude-sonnet-4-6",
+                "allowedTools": ["Bash", "Read"],
+            }
+            (home / "settings.json").write_text(
+                json.dumps(settings), encoding="utf-8"
+            )
+            result = inspect_claude_code_config(home)
+            self.assertEqual(result["parse_status"], "ok")
+            self.assertTrue(result["permissions_present"])
+            self.assertEqual(result["permissions_count"], 1)
+            self.assertTrue(result["env_present"])
+            self.assertTrue(result["hooks_present"])
+            self.assertEqual(result["hooks_count"], 1)
+            self.assertEqual(result["model"], "claude-sonnet-4-6")
+            self.assertTrue(result["allowed_tools_present"])
+
+    def test_inspect_claude_code_config_missing(self) -> None:
+        from codex_environment_backup.core import inspect_claude_code_config
+        with self.temp_root() as temp_dir:
+            home = Path(temp_dir) / "claude-home"
+            home.mkdir()
+            result = inspect_claude_code_config(home)
+            self.assertFalse(result["present"])
+
     def test_cli_doctor_is_structural_by_default(self) -> None:
         from codex_environment_backup.cli import build_parser
 

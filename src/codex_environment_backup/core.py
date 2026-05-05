@@ -74,51 +74,6 @@ class EnvironmentProfile:
     extra_excluded_dirs: tuple[str, ...] = ()
 
 
-CODEX_PROFILE = EnvironmentProfile(
-    name="codex",
-    display_name="Codex",
-    default_home_dir=".codex",
-    env_home_var="CODEX_HOME",
-    backup_prefix="codex-backup",
-    pre_restore_prefix="pre-restore-codex-backup",
-    default_backup_subdir="CodexBackups",
-    important_paths=(
-        "auth.json", "hooks.json", "history.jsonl", "sessions",
-        "archived_sessions", "memories", "skills", "plugins",
-        "rules", "automations", "codex-fast-proxy-state",
-    ),
-    config_file="config.toml",
-    config_inspector=None,
-    commands=(("codex", "--version"), ("codex", "mcp", "list")),
-    integration_module="codex_fast_proxy",
-)
-
-CLAUDE_CODE_PROFILE = EnvironmentProfile(
-    name="claude-code",
-    display_name="Claude Code",
-    default_home_dir=".claude",
-    env_home_var=None,
-    backup_prefix="claude-code-backup",
-    pre_restore_prefix="pre-restore-claude-code-backup",
-    default_backup_subdir="ClaudeCodeBackups",
-    important_paths=(
-        "settings.json", "settings.local.json", "credentials.json",
-        "statsig", "projects", "memory", "todos", "plugins",
-        "keybindings.json",
-    ),
-    config_file="settings.json",
-    config_inspector=None,
-    commands=(("claude", "--version"), ("claude", "mcp", "list")),
-    integration_module=None,
-    extra_excluded_dirs=("cache",),
-)
-
-PROFILES: dict[str, EnvironmentProfile] = {
-    "codex": CODEX_PROFILE,
-    "claude-code": CLAUDE_CODE_PROFILE,
-}
-
-
 class BackupError(RuntimeError):
     """Raised when a backup or restore cannot complete safely."""
 
@@ -132,9 +87,11 @@ def local_timestamp(prefix: str = "codex-backup") -> str:
 
 
 def resolve_home(
-    profile: EnvironmentProfile = CODEX_PROFILE,
+    profile: EnvironmentProfile | None = None,
     home_override: str | os.PathLike[str] | None = None,
 ) -> Path:
+    if profile is None:
+        profile = CODEX_PROFILE
     if home_override:
         return Path(home_override).expanduser().resolve()
     if profile.env_home_var is not None:
@@ -148,7 +105,9 @@ def resolve_codex_home(codex_home: str | os.PathLike[str] | None = None) -> Path
     return resolve_home(CODEX_PROFILE, codex_home)
 
 
-def default_backup_root(profile: EnvironmentProfile = CODEX_PROFILE) -> Path:
+def default_backup_root(profile: EnvironmentProfile | None = None) -> Path:
+    if profile is None:
+        profile = CODEX_PROFILE
     return (Path.home() / "Documents" / profile.default_backup_subdir).resolve()
 
 
@@ -366,7 +325,7 @@ def summarize_command_results(commands: dict[str, dict[str, Any]], *, run: bool)
     }
 
 
-def inspect_config(codex_home: Path) -> dict[str, Any]:
+def inspect_codex_config(codex_home: Path) -> dict[str, Any]:
     config_path = codex_home / "config.toml"
     result: dict[str, Any] = {
         "path": "config.toml",
@@ -411,6 +370,89 @@ def inspect_config(codex_home: Path) -> dict[str, Any]:
         }
     )
     return result
+
+
+inspect_config = inspect_codex_config
+
+
+def inspect_claude_code_config(home: Path) -> dict[str, Any]:
+    config_path = home / "settings.json"
+    result: dict[str, Any] = {
+        "path": "settings.json",
+        "present": config_path.exists(),
+    }
+    if not config_path.exists():
+        return result
+    result["bytes"] = config_path.stat().st_size
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        result["parse_status"] = "failed"
+        result["error"] = str(exc)
+        return result
+    if not isinstance(data, dict):
+        result["parse_status"] = "failed"
+        result["error"] = "root is not an object"
+        return result
+    permissions = data.get("permissions")
+    hooks = data.get("hooks")
+    result.update({
+        "parse_status": "ok",
+        "permissions_present": isinstance(permissions, dict),
+        "permissions_count": len(permissions.get("allow", [])) if isinstance(permissions, dict) else 0,
+        "env_present": isinstance(data.get("env"), dict),
+        "hooks_present": isinstance(hooks, dict),
+        "hooks_count": sum(len(v) for v in hooks.values() if isinstance(v, list)) if isinstance(hooks, dict) else 0,
+        "model": data.get("model"),
+        "theme": data.get("theme"),
+        "allowed_tools_present": isinstance(data.get("allowedTools"), list),
+    })
+    return result
+
+
+CODEX_PROFILE = EnvironmentProfile(
+    name="codex",
+    display_name="Codex",
+    default_home_dir=".codex",
+    env_home_var="CODEX_HOME",
+    backup_prefix="codex-backup",
+    pre_restore_prefix="pre-restore-codex-backup",
+    default_backup_subdir="CodexBackups",
+    important_paths=(
+        "auth.json", "hooks.json", "history.jsonl", "sessions",
+        "archived_sessions", "memories", "skills", "plugins",
+        "rules", "automations", "codex-fast-proxy-state",
+    ),
+    config_file="config.toml",
+    config_inspector=inspect_codex_config,
+    commands=(("codex", "--version"), ("codex", "mcp", "list")),
+    integration_module="codex_fast_proxy",
+)
+
+CLAUDE_CODE_PROFILE = EnvironmentProfile(
+    name="claude-code",
+    display_name="Claude Code",
+    default_home_dir=".claude",
+    env_home_var=None,
+    backup_prefix="claude-code-backup",
+    pre_restore_prefix="pre-restore-claude-code-backup",
+    default_backup_subdir="ClaudeCodeBackups",
+    important_paths=(
+        "settings.json", "settings.local.json", "credentials.json",
+        "statsig", "projects", "memory", "todos", "plugins",
+        "keybindings.json",
+    ),
+    config_file="settings.json",
+    config_inspector=inspect_claude_code_config,
+    commands=(("claude", "--version"), ("claude", "mcp", "list")),
+    integration_module=None,
+    extra_excluded_dirs=("cache",),
+)
+
+PROFILES: dict[str, EnvironmentProfile] = {
+    "codex": CODEX_PROFILE,
+    "claude-code": CLAUDE_CODE_PROFILE,
+}
 
 
 def count_tree(path: Path) -> dict[str, Any]:
