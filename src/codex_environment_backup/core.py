@@ -17,7 +17,8 @@ import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from dataclasses import dataclass
+from typing import Any, Callable, Iterator
 from textwrap import dedent
 
 try:
@@ -46,6 +47,76 @@ SENSITIVE_NOTE = (
     "local hooks, and other sensitive environment data. Keep it offline unless "
     "you have explicitly reviewed and approved another storage location."
 )
+
+
+def _make_sensitive_note(display_name: str) -> str:
+    return (
+        f"This backup can contain {display_name} history, provider configuration, "
+        "login state, local hooks, and other sensitive environment data. Keep it "
+        "offline unless you have explicitly reviewed and approved another storage location."
+    )
+
+
+@dataclass(frozen=True)
+class EnvironmentProfile:
+    name: str
+    display_name: str
+    default_home_dir: str
+    env_home_var: str | None
+    backup_prefix: str
+    pre_restore_prefix: str
+    default_backup_subdir: str
+    important_paths: tuple[str, ...]
+    config_file: str | None
+    config_inspector: Callable[[Path], dict[str, Any]] | None
+    commands: tuple[tuple[str, ...], ...]
+    integration_module: str | None
+    extra_excluded_dirs: tuple[str, ...] = ()
+
+
+CODEX_PROFILE = EnvironmentProfile(
+    name="codex",
+    display_name="Codex",
+    default_home_dir=".codex",
+    env_home_var="CODEX_HOME",
+    backup_prefix="codex-backup",
+    pre_restore_prefix="pre-restore-codex-backup",
+    default_backup_subdir="CodexBackups",
+    important_paths=(
+        "auth.json", "hooks.json", "history.jsonl", "sessions",
+        "archived_sessions", "memories", "skills", "plugins",
+        "rules", "automations", "codex-fast-proxy-state",
+    ),
+    config_file="config.toml",
+    config_inspector=None,
+    commands=(("codex", "--version"), ("codex", "mcp", "list")),
+    integration_module="codex_fast_proxy",
+)
+
+CLAUDE_CODE_PROFILE = EnvironmentProfile(
+    name="claude-code",
+    display_name="Claude Code",
+    default_home_dir=".claude",
+    env_home_var=None,
+    backup_prefix="claude-code-backup",
+    pre_restore_prefix="pre-restore-claude-code-backup",
+    default_backup_subdir="ClaudeCodeBackups",
+    important_paths=(
+        "settings.json", "settings.local.json", "credentials.json",
+        "statsig", "projects", "memory", "todos", "plugins",
+        "keybindings.json",
+    ),
+    config_file="settings.json",
+    config_inspector=None,
+    commands=(("claude", "--version"), ("claude", "mcp", "list")),
+    integration_module=None,
+    extra_excluded_dirs=("cache",),
+)
+
+PROFILES: dict[str, EnvironmentProfile] = {
+    "codex": CODEX_PROFILE,
+    "claude-code": CLAUDE_CODE_PROFILE,
+}
 
 
 class BackupError(RuntimeError):

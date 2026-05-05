@@ -507,6 +507,21 @@ service_tier = "auto"
             self.assertTrue(status_result["stdout_summary"]["provider_present"])
             self.assertTrue(status_result["stdout_summary"]["base_url_present"])
 
+    def test_profile_registry_contains_both_profiles(self) -> None:
+        from codex_environment_backup.core import PROFILES, CODEX_PROFILE, CLAUDE_CODE_PROFILE
+        self.assertIn("codex", PROFILES)
+        self.assertIn("claude-code", PROFILES)
+        self.assertIs(PROFILES["codex"], CODEX_PROFILE)
+        self.assertIs(PROFILES["claude-code"], CLAUDE_CODE_PROFILE)
+        self.assertEqual(CODEX_PROFILE.name, "codex")
+        self.assertEqual(CLAUDE_CODE_PROFILE.name, "claude-code")
+        self.assertEqual(CODEX_PROFILE.default_home_dir, ".codex")
+        self.assertEqual(CLAUDE_CODE_PROFILE.default_home_dir, ".claude")
+        self.assertEqual(CODEX_PROFILE.env_home_var, "CODEX_HOME")
+        self.assertIsNone(CLAUDE_CODE_PROFILE.env_home_var)
+        self.assertEqual(CODEX_PROFILE.backup_prefix, "codex-backup")
+        self.assertEqual(CLAUDE_CODE_PROFILE.backup_prefix, "claude-code-backup")
+
     def test_cli_doctor_is_structural_by_default(self) -> None:
         from codex_environment_backup.cli import build_parser
 
