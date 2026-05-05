@@ -898,7 +898,7 @@ RESTORE_STANDALONE_PY = dedent(
             "schema_version": 1,
             "created_at": datetime.now().isoformat(),
             "profile": profile,
-            "codex_home": str(source_home),
+            "home": str(source_home),
             "backup_name": backup_dir.name,
             "counts": {
                 "files": len(entries),
