@@ -735,6 +735,14 @@ service_tier = "auto"
         self.assertIs(shim.CLAUDE_CODE_PROFILE, main_pkg.CLAUDE_CODE_PROFILE)
         self.assertIs(shim.resolve_home, main_pkg.resolve_home)
 
+    def test_shim_submodule_imports(self) -> None:
+        import codex_environment_backup.core as shim_core
+        import codex_environment_backup.cli as shim_cli
+        import agent_environment_backup.core as real_core
+        import agent_environment_backup.cli as real_cli
+        self.assertIs(shim_core.create_backup, real_core.create_backup)
+        self.assertIs(shim_cli.main, real_cli.main)
+
     def test_cli_restore_confirm_flag_and_alias(self) -> None:
         from agent_environment_backup.cli import build_parser
         args = build_parser().parse_args([
