@@ -20,8 +20,8 @@ def emit_json(data: object) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="codex-environment-backup",
-        description="Back up, restore, and inspect a local Codex environment.",
+        prog="agent-environment-backup",
+        description="Back up, restore, and inspect a local AI agent environment.",
     )
     parser.add_argument(
         "--profile",
@@ -31,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    backup = subparsers.add_parser("backup", help="Create an offline Codex backup")
+    backup = subparsers.add_parser("backup", help="Create an offline environment backup")
     backup.add_argument("--home", "--codex-home", dest="home",
                         help="Environment home path. Defaults to profile default.")
     backup.add_argument("--backup-root", help="Directory where backups are stored.")
@@ -43,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip external doctor commands such as codex --version.",
     )
 
-    restore = subparsers.add_parser("restore", help="Dry-run or apply a Codex restore")
+    restore = subparsers.add_parser("restore", help="Dry-run or apply a restore")
     restore.add_argument("--archive", required=True, help="Backup archive or backup directory.")
     restore.add_argument("--home", "--codex-home", dest="home",
                          help="Environment home path. Defaults to profile default.")
@@ -63,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run external post-restore doctor commands after apply. Default is structural checks only.",
     )
 
-    doctor = subparsers.add_parser("doctor", help="Inspect Codex environment health")
+    doctor = subparsers.add_parser("doctor", help="Inspect environment health")
     doctor.add_argument("--home", "--codex-home", dest="home",
                         help="Environment home path. Defaults to profile default.")
     doctor.add_argument(

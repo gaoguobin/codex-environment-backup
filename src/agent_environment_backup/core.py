@@ -42,13 +42,6 @@ LIVE_SQLITE_SUFFIXES = (
     "-shm",
 )
 
-SENSITIVE_NOTE = (
-    "This backup can contain Codex history, provider configuration, login state, "
-    "local hooks, and other sensitive environment data. Keep it offline unless "
-    "you have explicitly reviewed and approved another storage location."
-)
-
-
 def _make_sensitive_note(display_name: str) -> str:
     return (
         f"This backup can contain {display_name} history, provider configuration, "
@@ -1506,7 +1499,7 @@ def temporary_extract_dir(source: Path, work_root: Path | None = None) -> Iterat
     for root in roots:
         try:
             root.mkdir(parents=True, exist_ok=True)
-            candidate = root / f"codex-restore-work-{uuid.uuid4().hex}"
+            candidate = root / f"restore-work-{uuid.uuid4().hex}"
             candidate.mkdir()
             temp_dir = candidate
             break
