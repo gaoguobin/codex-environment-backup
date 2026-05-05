@@ -30,7 +30,7 @@ No build step, no linter configured, no type checker configured. Zero external d
 
 **Single-module package** under `src/agent_environment_backup/`:
 
-- `core.py` — All business logic. Four main operations: `doctor_codex_environment`, `create_backup`, `restore_backup`, `list_backups`. Each returns a dict that the CLI layer serializes to JSON. Also contains the embedded `RESTORE_STANDALONE_PY` string — a self-contained restore script included in every backup archive so users can restore without installing the package. The `EnvironmentProfile` abstraction encapsulates per-agent differences (home directory, backup location, naming conventions) so each operation is profile-aware without scattered if/else branches.
+- `core.py` — All business logic. Four main operations: `doctor_environment`, `create_backup`, `restore_backup`, `list_backups`. Each returns a dict that the CLI layer serializes to JSON. Also contains the embedded `RESTORE_STANDALONE_PY` string — a self-contained restore script included in every backup archive so users can restore without installing the package. The `EnvironmentProfile` frozen dataclass encapsulates per-agent differences (home directory, config inspector, external commands, backup naming, exclusion rules) so each operation is profile-aware without scattered if/else branches. Legacy aliases (`doctor_codex_environment`, `resolve_codex_home`) remain for backward compatibility.
 - `cli.py` — argparse wrapper that calls core functions and prints JSON. Adds `--profile codex|claude-code` as a top-level flag. No logic beyond argument parsing and profile selection.
 - `__init__.py` — Re-exports core public API and `__version__`.
 
@@ -38,23 +38,23 @@ A thin compatibility shim at `src/codex_environment_backup/` forwards imports an
 
 **Skill integration** (`skills/codex-environment-backup/` and `skills/claude-code-environment-backup/`):
 
-- `SKILL.md` — Codex skill definition with trigger patterns, workflow instructions, and safety model. This is the natural-language contract between the user and Codex.
-- `agents/openai.yaml` — OpenAI agent metadata (display name, default prompt).
+- Each directory has a `SKILL.md` — natural-language contract defining trigger patterns, CLI workflows, and safety model. The Codex skill uses `--profile codex`; the Claude Code skill uses `--profile claude-code`.
+- `agents/openai.yaml` — OpenAI agent metadata (Codex skill only).
 
 **Scripts** (`scripts/`) — Thin entry points that prepend subcommand names and forward to `cli.main`. Convenience for direct invocation without `python -m`.
 
-**Lifecycle docs** (`.codex/INSTALL.md`, `UPDATE.md`, `UNINSTALL.md`) — Codex-executable install/update/uninstall instructions. These are the source of truth for lifecycle operations; `test_docs.py` asserts their structural invariants.
+**Lifecycle docs** (`.codex/` and `.claude/`, each with `INSTALL.md`, `UPDATE.md`, `UNINSTALL.md`) — Agent-executable install/update/uninstall instructions. Each set targets its respective environment. `test_docs.py` asserts their structural invariants.
 
 ## Key Design Decisions
 
 - **All CLI output is JSON.** Every operation returns `{"ok": bool, ...}`. The skill/agent layer consumes this JSON; human-readable summaries exist only inside backup artifacts.
 - **SQLite files use the `sqlite3` online backup API**, not file copy. Integrity is verified with `PRAGMA integrity_check` after backup.
-- **Restore is always overlay** — it writes backed-up files on top of existing CODEX_HOME without pruning. Excluded paths (`.sandbox*`, `.tmp`, WAL/SHM) are never touched.
-- **Pre-restore backup is mandatory** — before apply, the tool backs up the current CODEX_HOME. If that fails, restore aborts.
-- **Doctor has two modes**: structural (default, no subprocess) and command-level (`--run-commands`, spawns `codex --version` etc.). Backup embeds a structural doctor by default.
+- **Restore is always overlay** — it writes backed-up files on top of the existing environment home without pruning. Excluded paths (`.sandbox*`, `.tmp`, WAL/SHM, plus profile-specific exclusions) are never touched.
+- **Pre-restore backup is mandatory** — before apply, the tool backs up the current environment home. If that fails, restore aborts.
+- **Doctor has two modes**: structural (default, no subprocess) and command-level (`--run-commands`, spawns profile-specific commands like `codex --version` or `claude --version`). Backup embeds a structural doctor by default.
 - **Secrets are never printed** — `redact_text()` strips API keys and tokens from command output. `auth.json` contents are backed up as files but never logged.
 - **Archive safety** — `safe_extract_tar` and `safe_extract_zip` reject symlinks and path-traversal members before extraction.
-- **Every backup includes a restore kit** — platform-specific scripts (`.cmd`, `.ps1`, `.command`, `.sh`) plus `restore-standalone.py` so users without the installed package can restore by double-clicking.
+- **Every backup includes a restore kit** — platform-specific scripts (`restore-environment.cmd`, `.ps1`, `.command`, `.sh`) plus `restore-standalone.py` so users without the installed package can restore by double-clicking. Text content is templated with the profile's display name.
 
 ## Testing Patterns
 
