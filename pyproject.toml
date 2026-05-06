@@ -10,12 +10,30 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
 license = { text = "MIT" }
+keywords = [
+    "agent-skills",
+    "codex",
+    "openai-codex",
+    "codex-skill",
+    "claude-code",
+    "ai-agents",
+    "environment-backup",
+    "backup-restore",
+    "sqlite-backup",
+    "local-first",
+]
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Operating System :: OS Independent",
 ]
+
+[project.urls]
+Homepage = "https://github.com/gaoguobin/codex-environment-backup#readme"
+Repository = "https://github.com/gaoguobin/codex-environment-backup"
+Issues = "https://github.com/gaoguobin/codex-environment-backup/issues"
+Documentation = "https://github.com/gaoguobin/codex-environment-backup#readme"
 
 [project.scripts]
 agent-environment-backup = "agent_environment_backup.cli:main"

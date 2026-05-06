@@ -1,6 +1,6 @@
 ---
 name: codex-environment-backup
-description: Back up, restore, inspect, list, install, update, or uninstall local Codex environment backup tooling. Use when the user asks to back up the current Codex environment, restore Codex from a backup, check whether a backup is valid, list Codex backups, install/update/uninstall the Codex backup skill, or set up manual/periodic Codex environment backup workflows with phrases such as "备份当前 Codex 环境", "恢复 Codex 环境", "检查 Codex 备份", "列出 Codex 备份", "安装 Codex 环境备份工具", "更新 Codex 环境备份工具", "卸载 Codex 环境备份工具", or "定期备份 Codex".
+description: Codex environment backup, restore, doctor, and list workflows for local CODEX_HOME state. Use for requests like back up Codex, restore Codex backup, list/check Codex backups, or install/update/uninstall the backup skill.
 ---
 
 Use this skill when the user wants Codex to manage local Codex environment backups. The user-facing interface is natural language; the Python CLI is the source of truth that Codex runs behind the scenes.
