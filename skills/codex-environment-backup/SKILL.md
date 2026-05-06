@@ -21,12 +21,12 @@ Resolve the Python command first. Prefer `python3`; fall back to `python` only w
 Run the CLI as the source of truth:
 
 ```text
-<python-cmd> -m codex_environment_backup doctor
-<python-cmd> -m codex_environment_backup doctor --run-commands
-<python-cmd> -m codex_environment_backup backup
-<python-cmd> -m codex_environment_backup list-backups
-<python-cmd> -m codex_environment_backup restore --archive <backup>
-<python-cmd> -m codex_environment_backup restore --archive <backup> --apply --i-understand-this-restores-sensitive-codex-state
+<python-cmd> -m agent_environment_backup --profile codex doctor
+<python-cmd> -m agent_environment_backup --profile codex doctor --run-commands
+<python-cmd> -m agent_environment_backup --profile codex backup
+<python-cmd> -m agent_environment_backup --profile codex list-backups
+<python-cmd> -m agent_environment_backup --profile codex restore --archive <backup>
+<python-cmd> -m agent_environment_backup --profile codex restore --archive <backup> --apply --i-understand-this-restores-sensitive-codex-state
 ```
 
 Resolve `CODEX_HOME` in this order:
@@ -41,8 +41,8 @@ Use `--backup-root <path>` when the user names a backup destination. Otherwise u
 
 For natural language backup requests:
 
-1. Run `<python-cmd> -m codex_environment_backup doctor`.
-2. Run `<python-cmd> -m codex_environment_backup backup`.
+1. Run `<python-cmd> -m agent_environment_backup --profile codex doctor`.
+2. Run `<python-cmd> -m agent_environment_backup --profile codex backup`.
 3. Report `ok`, `backup_dir`, `archive`, `archive_sha256`, `sha256_file`, and `counts`.
 4. Remind the user that the archive is local and sensitive.
 
@@ -55,7 +55,7 @@ Do not ask the user to run commands for normal backup requests. Ask for approval
 For restore requests:
 
 1. Ask for or locate the backup archive/directory.
-2. Run dry-run first with `<python-cmd> -m codex_environment_backup restore --archive <backup>`.
+2. Run dry-run first with `<python-cmd> -m agent_environment_backup --profile codex restore --archive <backup>`.
 3. Report the restore plan and whether the target appears to be the active `CODEX_HOME`.
 4. If the user only wanted a plan, stop after dry-run.
 5. Apply only after explicit confirmation.
@@ -64,16 +64,16 @@ Hard boundary: if applying to the same `CODEX_HOME` used by the current Codex Ap
 
 - If the user has a backup directory, point them to `RESTORE.md` and the platform helper in that directory. Use `RESTORE_INSTRUCTIONS.txt` as a plain-text fallback.
 - If the user has a backup archive, tell them to extract it first, open `RESTORE.md` or `RESTORE_INSTRUCTIONS.txt`, close Codex App, and run the platform helper.
-- On Windows, the normal non-command handoff is double-clicking `restore-codex-environment.cmd`.
-- On macOS, the normal non-command handoff is opening `restore-codex-environment.command`.
-- On Linux, use `restore-codex-environment.sh`.
+- On Windows, the normal non-command handoff is double-clicking `restore-environment.cmd`.
+- On macOS, the normal non-command handoff is opening `restore-environment.command`.
+- On Linux, use `restore-environment.sh`.
 
 Provide the exact CLI handoff only for advanced users or when the restore helper is missing.
 
 When apply is safe to run from the current context, run:
 
 ```text
-<python-cmd> -m codex_environment_backup restore --archive <backup> --apply --i-understand-this-restores-sensitive-codex-state
+<python-cmd> -m agent_environment_backup --profile codex restore --archive <backup> --apply --i-understand-this-restores-sensitive-codex-state
 ```
 
 The CLI creates a pre-restore backup before applying. Restore overlays backed-up files and does not prune excluded paths.
@@ -84,7 +84,7 @@ The default post-restore doctor is structural only. Do not add `--run-post-resto
 For health checks:
 
 ```text
-<python-cmd> -m codex_environment_backup doctor
+<python-cmd> -m agent_environment_backup --profile codex doctor
 ```
 
 This is the default path for natural-language health checks. It reports backup readiness without external command probe noise.
@@ -92,13 +92,13 @@ This is the default path for natural-language health checks. It reports backup r
 For explicit command-level checks only:
 
 ```text
-<python-cmd> -m codex_environment_backup doctor --run-commands
+<python-cmd> -m agent_environment_backup --profile codex doctor --run-commands
 ```
 
 For listing backups:
 
 ```text
-<python-cmd> -m codex_environment_backup list-backups
+<python-cmd> -m agent_environment_backup --profile codex list-backups
 ```
 
 Report `core_ok`, `path_scan_ok`, `command_ok`, whether command probes were skipped, and presence/counts for config, hooks, sessions, archived sessions, memories, skills, plugins, rules, automations, and optional `codex-fast-proxy` status. If `codex_fast_proxy` is not installed, report it as skipped rather than failed. Do not print provider URLs, local state paths, or full integration stdout from optional integrations.

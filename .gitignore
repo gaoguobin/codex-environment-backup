@@ -4,6 +4,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .venv/
+.claude/settings.local.json
 build/
 dist/
 *.egg-info/
@@ -11,6 +12,8 @@ dist/
 test_tmp_runtime/
 codex-backup-*/
 pre-restore-codex-backup-*/
+claude-code-backup-*/
+pre-restore-claude-code-backup-*/
 *.tar.gz
 *.zip
 *.sha256

@@ -75,7 +75,7 @@ New-Item -ItemType Directory -Force -Path $skillsRoot | Out-Null
 git clone https://github.com/gaoguobin/codex-environment-backup.git $repoRoot
 & $pythonCmd -m pip install --user -e $repoRoot
 cmd /d /c "mklink /J `"$skillNamespace`" `"$repoRoot\skills`""
-& $pythonCmd -m codex_environment_backup doctor
+& $pythonCmd -m agent_environment_backup --profile codex doctor
 ```
 
 ### macOS or Linux shell
@@ -123,7 +123,7 @@ mkdir -p "$skills_root"
 git clone https://github.com/gaoguobin/codex-environment-backup.git "$repo_root"
 "$python_cmd" -m pip install --user -e "$repo_root"
 ln -s "$repo_root/skills" "$skill_namespace"
-"$python_cmd" -m codex_environment_backup doctor
+"$python_cmd" -m agent_environment_backup --profile codex doctor
 ```
 
 ## After install

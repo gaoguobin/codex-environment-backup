@@ -1,23 +1,3 @@
-"""Codex environment backup and restore helpers."""
-
-from .core import (
-    BackupError,
-    create_backup,
-    default_backup_root,
-    doctor_codex_environment,
-    list_backups,
-    resolve_codex_home,
-    restore_backup,
-)
-
-__all__ = [
-    "BackupError",
-    "create_backup",
-    "default_backup_root",
-    "doctor_codex_environment",
-    "list_backups",
-    "resolve_codex_home",
-    "restore_backup",
-]
-
-__version__ = "0.1.2"
+"""Backward-compatible shim - imports from agent_environment_backup."""
+from agent_environment_backup import *  # noqa: F401,F403
+from agent_environment_backup import __all__, __version__  # noqa: F811

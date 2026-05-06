@@ -1,33 +1,31 @@
-# codex-environment-backup uninstall for Codex
+# agent-environment-backup uninstall for Claude Code
 
-Use these instructions when an engineer asks Codex to uninstall the Codex environment backup skill and CLI.
+Use these instructions when a user asks Claude Code to uninstall the environment backup skill and CLI.
 
-## One-paste prompt for engineers
+## One-paste prompt
 
 ```text
-Fetch and follow instructions from https://raw.githubusercontent.com/gaoguobin/codex-environment-backup/main/.codex/UNINSTALL.md
+Fetch and follow instructions from https://raw.githubusercontent.com/gaoguobin/codex-environment-backup/main/.claude/UNINSTALL.md
 ```
 
 ## Uninstall boundary
 
-This file is for Codex to execute after the user asks for uninstall in natural language or pastes the one-paste prompt. Do not ask the user to manually type the command block unless Codex itself is unavailable.
+This file is for Claude Code to execute after the user asks for uninstall in natural language or pastes the one-paste prompt. Do not ask the user to manually type the command block unless Claude Code itself is unavailable.
 
 Uninstall removes the package, skill link, and cloned repo. It must not delete generated backup archives or backup directories unless the user explicitly asks for that separate cleanup.
 If the user later asks to remove old backups, first confirm that a newer backup
 has been created, appears in `list-backups`, has a SHA256 file, and passes a
 restore dry-run.
 
-If the Codex environment uses sandbox or approval controls, request approval/escalation for uninstall because it may uninstall a Python package, remove a link under `~/.agents`, and delete `~/.codex/codex-environment-backup`.
-
-If any command fails because of permissions, sandbox write limits, process locks, or link removal, do not try unrelated workarounds. Ask for approval and rerun the same intended uninstall step.
+If any command fails because of permissions, process locks, or link removal, do not try unrelated workarounds. Ask for approval and rerun the same intended uninstall step.
 
 ### Windows PowerShell
 
 Run this PowerShell block exactly:
 
 ```powershell
-$repoRoot = Join-Path $HOME '.codex\codex-environment-backup'
-$skillNamespace = Join-Path $HOME '.agents\skills\codex-environment-backup'
+$repoRoot = Join-Path $HOME '.claude\agent-environment-backup'
+$skillNamespace = Join-Path $HOME '.claude\skills\claude-code-environment-backup'
 $pythonCmd = $null
 
 foreach ($candidate in @('python3', 'python')) {
@@ -59,7 +57,7 @@ if (-not $pythonCmd) {
 }
 
 if ($pythonCmd) {
-    & $pythonCmd -m pip uninstall -y agent-environment-backup codex-environment-backup
+    & $pythonCmd -m pip uninstall -y agent-environment-backup
 }
 
 if (Test-Path $skillNamespace) {
@@ -78,8 +76,8 @@ Run this shell block exactly:
 ```bash
 set -euo pipefail
 
-repo_root="$HOME/.codex/codex-environment-backup"
-skill_namespace="$HOME/.agents/skills/codex-environment-backup"
+repo_root="$HOME/.claude/agent-environment-backup"
+skill_namespace="$HOME/.claude/skills/claude-code-environment-backup"
 python_cmd="${PYTHON:-}"
 
 if [ -z "$python_cmd" ]; then
@@ -101,7 +99,7 @@ if [ -z "$python_cmd" ]; then
 fi
 
 if [ -n "$python_cmd" ]; then
-  "$python_cmd" -m pip uninstall -y agent-environment-backup codex-environment-backup
+  "$python_cmd" -m pip uninstall -y agent-environment-backup
 fi
 
 if [ -L "$skill_namespace" ] || [ -e "$skill_namespace" ]; then
@@ -113,10 +111,10 @@ if [ -d "$repo_root" ]; then
 fi
 ```
 
-When cleanup completed, explicitly tell the user in the user's language:
+When cleanup completed, explicitly tell the user:
 
 ```text
-Please restart Codex App, or open a new CLI session, so Codex removes codex-environment-backup from the skill list.
+Please restart Claude Code, or open a new CLI session, so Claude Code removes claude-code-environment-backup from the skill list.
 
-请重启 Codex App，或新开 CLI 实例，让它从 skill 列表中移除 codex-environment-backup。
+请重启 Claude Code，或新开 CLI 实例，让它从 skill 列表中移除 claude-code-environment-backup。
 ```

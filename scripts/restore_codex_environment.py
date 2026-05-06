@@ -8,7 +8,7 @@ SRC = REPO_ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from codex_environment_backup.cli import main
+from agent_environment_backup.cli import main
 
 if __name__ == "__main__":
     raise SystemExit(main(["restore", *sys.argv[1:]]))

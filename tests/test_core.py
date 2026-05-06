@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -18,11 +19,12 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-import codex_environment_backup.core as core_module  # noqa: E402
-from codex_environment_backup.core import (  # noqa: E402
+import agent_environment_backup.core as core_module  # noqa: E402
+from agent_environment_backup.core import (  # noqa: E402
     BackupError,
     create_backup,
     doctor_codex_environment,
+    doctor_environment,
     list_backups,
     restore_backup,
 )
@@ -112,10 +114,10 @@ service_tier = "auto"
                 names = {Path(member.name).name for member in archive.getmembers()}
             self.assertIn("RESTORE.md", names)
             self.assertIn("RESTORE_INSTRUCTIONS.txt", names)
-            self.assertIn("restore-codex-environment.cmd", names)
-            self.assertIn("restore-codex-environment.ps1", names)
-            self.assertIn("restore-codex-environment.command", names)
-            self.assertIn("restore-codex-environment.sh", names)
+            self.assertIn("restore-environment.cmd", names)
+            self.assertIn("restore-environment.ps1", names)
+            self.assertIn("restore-environment.command", names)
+            self.assertIn("restore-environment.sh", names)
             self.assertIn("restore-standalone.py", names)
             standalone = subprocess.run(
                 [
@@ -161,10 +163,10 @@ service_tier = "auto"
             for helper_name in (
                 "RESTORE.md",
                 "RESTORE_INSTRUCTIONS.txt",
-                "restore-codex-environment.cmd",
-                "restore-codex-environment.ps1",
-                "restore-codex-environment.command",
-                "restore-codex-environment.sh",
+                "restore-environment.cmd",
+                "restore-environment.ps1",
+                "restore-environment.command",
+                "restore-environment.sh",
                 "restore-standalone.py",
             ):
                 self.assertTrue((pre_restore_dir / helper_name).exists(), helper_name)
@@ -507,19 +509,580 @@ service_tier = "auto"
             self.assertTrue(status_result["stdout_summary"]["provider_present"])
             self.assertTrue(status_result["stdout_summary"]["base_url_present"])
 
+    def test_profile_registry_contains_both_profiles(self) -> None:
+        from agent_environment_backup.core import PROFILES, CODEX_PROFILE, CLAUDE_CODE_PROFILE
+        self.assertIn("codex", PROFILES)
+        self.assertIn("claude-code", PROFILES)
+        self.assertIs(PROFILES["codex"], CODEX_PROFILE)
+        self.assertIs(PROFILES["claude-code"], CLAUDE_CODE_PROFILE)
+        self.assertEqual(CODEX_PROFILE.name, "codex")
+        self.assertEqual(CLAUDE_CODE_PROFILE.name, "claude-code")
+        self.assertEqual(CODEX_PROFILE.default_home_dir, ".codex")
+        self.assertEqual(CLAUDE_CODE_PROFILE.default_home_dir, ".claude")
+        self.assertEqual(CODEX_PROFILE.env_home_var, "CODEX_HOME")
+        self.assertIsNone(CLAUDE_CODE_PROFILE.env_home_var)
+        self.assertEqual(CODEX_PROFILE.backup_prefix, "codex-backup")
+        self.assertEqual(CLAUDE_CODE_PROFILE.backup_prefix, "claude-code-backup")
+
+    def test_resolve_home_uses_profile_default(self) -> None:
+        from agent_environment_backup.core import resolve_home, CODEX_PROFILE, CLAUDE_CODE_PROFILE
+        env_without_codex_home = {k: v for k, v in os.environ.items() if k != "CODEX_HOME"}
+        with mock.patch.dict(os.environ, env_without_codex_home, clear=True):
+            codex_home = resolve_home(CODEX_PROFILE)
+            claude_home = resolve_home(CLAUDE_CODE_PROFILE)
+        self.assertEqual(codex_home, (Path.home() / ".codex").resolve())
+        self.assertEqual(claude_home, (Path.home() / ".claude").resolve())
+
+    def test_resolve_home_respects_env_var(self) -> None:
+        from agent_environment_backup.core import resolve_home, CODEX_PROFILE, CLAUDE_CODE_PROFILE
+        with mock.patch.dict(os.environ, {"CODEX_HOME": "/tmp/custom-codex"}):
+            result = resolve_home(CODEX_PROFILE)
+        self.assertEqual(result, Path("/tmp/custom-codex").resolve())
+        env_without_codex_home = {k: v for k, v in os.environ.items() if k != "CODEX_HOME"}
+        with mock.patch.dict(os.environ, env_without_codex_home, clear=True):
+            result = resolve_home(CLAUDE_CODE_PROFILE)
+        self.assertEqual(result, (Path.home() / ".claude").resolve())
+
+    def test_resolve_home_override_takes_precedence(self) -> None:
+        from agent_environment_backup.core import resolve_home, CODEX_PROFILE
+        with mock.patch.dict(os.environ, {"CODEX_HOME": "/tmp/env"}):
+            result = resolve_home(CODEX_PROFILE, "/tmp/explicit")
+        self.assertEqual(result, Path("/tmp/explicit").resolve())
+
+    def test_default_backup_root_uses_profile(self) -> None:
+        from agent_environment_backup.core import default_backup_root, CODEX_PROFILE, CLAUDE_CODE_PROFILE
+        codex_root = default_backup_root(CODEX_PROFILE)
+        claude_root = default_backup_root(CLAUDE_CODE_PROFILE)
+        self.assertTrue(str(codex_root).endswith("CodexBackups"))
+        self.assertTrue(str(claude_root).endswith("ClaudeCodeBackups"))
+
+    def test_inspect_claude_code_config(self) -> None:
+        from agent_environment_backup.core import inspect_claude_code_config
+        with self.temp_root() as temp_dir:
+            home = Path(temp_dir) / "claude-home"
+            home.mkdir()
+            settings = {
+                "permissions": {"allow": ["Bash(git *)"]},
+                "env": {"DEBUG": "1"},
+                "hooks": {"afterToolCall": [{"command": "echo done"}]},
+                "model": "claude-sonnet-4-6",
+                "allowedTools": ["Bash", "Read"],
+            }
+            (home / "settings.json").write_text(
+                json.dumps(settings), encoding="utf-8"
+            )
+            result = inspect_claude_code_config(home)
+            self.assertEqual(result["parse_status"], "ok")
+            self.assertTrue(result["permissions_present"])
+            self.assertEqual(result["permissions_count"], 1)
+            self.assertTrue(result["env_present"])
+            self.assertTrue(result["hooks_present"])
+            self.assertEqual(result["hooks_count"], 1)
+            self.assertEqual(result["model"], "claude-sonnet-4-6")
+            self.assertTrue(result["allowed_tools_present"])
+
+    def test_inspect_claude_code_config_missing(self) -> None:
+        from agent_environment_backup.core import inspect_claude_code_config
+        with self.temp_root() as temp_dir:
+            home = Path(temp_dir) / "claude-home"
+            home.mkdir()
+            result = inspect_claude_code_config(home)
+            self.assertFalse(result["present"])
+
+    def make_claude_code_home(self, root: Path) -> Path:
+        home = root / "claude-home"
+        home.mkdir(parents=True)
+        (home / "projects").mkdir()
+        (home / "memory").mkdir()
+        (home / "todos").mkdir()
+        (home / "plugins").mkdir()
+        (home / "statsig").mkdir()
+        (home / "settings.json").write_text(
+            json.dumps({"model": "claude-sonnet-4-6", "permissions": {"allow": []}}),
+            encoding="utf-8",
+        )
+        (home / "settings.local.json").write_text("{}", encoding="utf-8")
+        (home / "credentials.json").write_text(
+            '{"access_token":"FAKE-CLAUDE-TOKEN"}', encoding="utf-8"
+        )
+        (home / "keybindings.json").write_text("[]", encoding="utf-8")
+        self.make_sqlite(home / "data.sqlite", "data")
+        return home
+
+    def test_doctor_claude_code_profile_structural(self) -> None:
+        from agent_environment_backup.core import doctor_environment, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            home = self.make_claude_code_home(Path(temp_dir))
+            report = doctor_environment(home, profile=CLAUDE_CODE_PROFILE, run_commands=False)
+            self.assertTrue(report["ok"], report)
+            self.assertIn("settings.json", report["paths"])
+            self.assertIn("projects", report["paths"])
+            self.assertIn("memory", report["paths"])
+            self.assertNotIn("auth.json", report["paths"])
+            self.assertNotIn("sessions", report["paths"])
+            self.assertIn("home", report)
+            self.assertNotIn("codex_home", report)
+            self.assertEqual(report["profile"], "claude-code")
+            report_json = json.dumps(report)
+            self.assertNotIn("FAKE-CLAUDE-TOKEN", report_json)
+
+    def test_backup_claude_code_profile(self) -> None:
+        from agent_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            backup_root = root / "backups"
+
+            result = create_backup(
+                home,
+                backup_root=backup_root,
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-code-backup-test",
+                run_doctor_commands=False,
+            )
+
+            self.assertTrue(result["ok"], result)
+            self.assertIn("claude-code-backup-test", result["backup_dir"])
+            manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+            self.assertEqual(manifest["profile"], "claude-code")
+            self.assertIn("home", manifest)
+            self.assertNotIn("codex_home", manifest)
+            paths = {entry["relative_path"] for entry in manifest["entries"]}
+            self.assertIn("settings.json", paths)
+            self.assertIn("credentials.json", paths)
+            self.assertIn("data.sqlite", paths)
+
+    def test_restore_claude_code_profile_dry_run_and_apply(self) -> None:
+        from agent_environment_backup.core import (
+            create_backup, restore_backup, list_backups, CLAUDE_CODE_PROFILE,
+        )
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            source_home = self.make_claude_code_home(root)
+            backup_result = create_backup(
+                source_home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-code-backup-test",
+                run_doctor_commands=False,
+            )
+            archive = Path(backup_result["archive"])
+
+            dry_run = restore_backup(archive, root / "dry-target", profile=CLAUDE_CODE_PROFILE)
+            self.assertTrue(dry_run["dry_run"])
+            self.assertFalse((root / "dry-target").exists())
+
+            target = root / "restored-claude"
+            target.mkdir()
+            (target / "settings.json").write_text('{"old":true}', encoding="utf-8")
+            result = restore_backup(
+                archive,
+                target,
+                backup_root=root / "prebacks",
+                profile=CLAUDE_CODE_PROFILE,
+                apply=True,
+                confirm=True,
+            )
+            self.assertTrue(result["ok"], result)
+            self.assertTrue(result["pre_restore_backup"])
+            restored_settings = json.loads(
+                (target / "settings.json").read_text(encoding="utf-8")
+            )
+            self.assertIn("model", restored_settings)
+
+            listing = list_backups(root / "backups", profile=CLAUDE_CODE_PROFILE)
+            self.assertTrue(any(
+                item.get("status") == "ok" for item in listing["backups"]
+            ))
+
     def test_cli_doctor_is_structural_by_default(self) -> None:
-        from codex_environment_backup.cli import build_parser
+        from agent_environment_backup.cli import build_parser
 
         args = build_parser().parse_args(["doctor"])
         self.assertFalse(args.run_commands)
         self.assertFalse(args.no_run_commands)
 
     def test_cli_doctor_supports_explicit_command_probe(self) -> None:
-        from codex_environment_backup.cli import build_parser
+        from agent_environment_backup.cli import build_parser
 
         args = build_parser().parse_args(["doctor", "--run-commands"])
         self.assertTrue(args.run_commands)
         self.assertFalse(args.no_run_commands)
+
+    def test_cli_backup_embeds_structural_doctor_by_default(self) -> None:
+        import agent_environment_backup.cli as cli_module
+
+        with mock.patch.object(cli_module, "emit_json"), mock.patch.object(
+            cli_module, "create_backup", return_value={"ok": True}
+        ) as create_mock:
+            return_code = cli_module.main(["backup", "--home", "/tmp/home", "--no-archive"])
+
+        self.assertEqual(return_code, 0)
+        self.assertFalse(create_mock.call_args.kwargs["run_doctor_commands"])
+
+    def test_cli_backup_supports_explicit_command_probe(self) -> None:
+        import agent_environment_backup.cli as cli_module
+
+        with mock.patch.object(cli_module, "emit_json"), mock.patch.object(
+            cli_module, "create_backup", return_value={"ok": True}
+        ) as create_mock:
+            return_code = cli_module.main([
+                "backup", "--home", "/tmp/home", "--run-doctor-commands",
+            ])
+
+        self.assertEqual(return_code, 0)
+        self.assertTrue(create_mock.call_args.kwargs["run_doctor_commands"])
+
+    def test_core_doctor_and_backup_defaults_are_structural(self) -> None:
+        import inspect
+
+        self.assertIs(
+            inspect.signature(core_module.doctor_environment).parameters["run_commands"].default,
+            False,
+        )
+        self.assertIs(
+            inspect.signature(core_module.create_backup).parameters["run_doctor_commands"].default,
+            False,
+        )
+
+    def test_cli_profile_argument_default(self) -> None:
+        from agent_environment_backup.cli import build_parser
+        args = build_parser().parse_args(["doctor"])
+        self.assertEqual(args.profile, "codex")
+
+    def test_cli_profile_argument_claude_code(self) -> None:
+        from agent_environment_backup.cli import build_parser
+        args = build_parser().parse_args(["--profile", "claude-code", "doctor"])
+        self.assertEqual(args.profile, "claude-code")
+
+    def test_cli_home_argument_and_codex_home_alias(self) -> None:
+        from agent_environment_backup.cli import build_parser
+        args = build_parser().parse_args(["doctor", "--home", "/tmp/test"])
+        self.assertEqual(args.home, "/tmp/test")
+        args2 = build_parser().parse_args(["doctor", "--codex-home", "/tmp/test2"])
+        self.assertEqual(args2.home, "/tmp/test2")
+
+    def test_shim_package_reexports(self) -> None:
+        import codex_environment_backup as shim
+        import agent_environment_backup as main_pkg
+        self.assertIs(shim.BackupError, main_pkg.BackupError)
+        self.assertIs(shim.create_backup, main_pkg.create_backup)
+        self.assertIs(shim.CODEX_PROFILE, main_pkg.CODEX_PROFILE)
+        self.assertIs(shim.CLAUDE_CODE_PROFILE, main_pkg.CLAUDE_CODE_PROFILE)
+        self.assertIs(shim.resolve_home, main_pkg.resolve_home)
+
+    def test_shim_submodule_imports(self) -> None:
+        import codex_environment_backup.core as shim_core
+        import codex_environment_backup.cli as shim_cli
+        import agent_environment_backup.core as real_core
+        import agent_environment_backup.cli as real_cli
+        self.assertIs(shim_core.create_backup, real_core.create_backup)
+        self.assertIs(shim_cli.main, real_cli.main)
+
+    def test_cli_restore_confirm_flag_and_alias(self) -> None:
+        from agent_environment_backup.cli import build_parser
+        args = build_parser().parse_args([
+            "restore", "--archive", "/tmp/a.tar.gz",
+            "--apply", "--i-understand-this-restores-sensitive-state",
+        ])
+        self.assertTrue(args.confirm)
+        args2 = build_parser().parse_args([
+            "restore", "--archive", "/tmp/a.tar.gz",
+            "--apply", "--i-understand-this-restores-sensitive-codex-state",
+        ])
+        self.assertTrue(args2.confirm)
+
+    def test_restore_kit_uses_profile_display_name(self) -> None:
+        from agent_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            result = create_backup(
+                home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-code-kit-test",
+                run_doctor_commands=False,
+            )
+            backup_dir = Path(result["backup_dir"])
+            restore_md = (backup_dir / "RESTORE.md").read_text(encoding="utf-8")
+            instructions = (backup_dir / "RESTORE_INSTRUCTIONS.txt").read_text(encoding="utf-8")
+            self.assertIn("Claude Code", restore_md)
+            self.assertIn("Claude Code", instructions)
+            self.assertNotIn("Codex", restore_md)
+            self.assertNotIn("Codex", instructions)
+            self.assertTrue((backup_dir / "restore-environment.cmd").exists())
+            self.assertTrue((backup_dir / "restore-environment.ps1").exists())
+            self.assertTrue((backup_dir / "restore-environment.command").exists())
+            self.assertTrue((backup_dir / "restore-environment.sh").exists())
+            self.assertFalse((backup_dir / "restore-codex-environment.cmd").exists())
+
+
+    def test_list_backups_annotates_profile(self) -> None:
+        from agent_environment_backup.core import (
+            create_backup, list_backups, CODEX_PROFILE, CLAUDE_CODE_PROFILE,
+        )
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            backup_root = root / "shared-backups"
+            codex_home = self.make_home(root)
+            claude_home = self.make_claude_code_home(root)
+            create_backup(
+                codex_home,
+                backup_root=backup_root,
+                profile=CODEX_PROFILE,
+                timestamp="codex-test",
+                run_doctor_commands=False,
+            )
+            create_backup(
+                claude_home,
+                backup_root=backup_root,
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-test",
+                run_doctor_commands=False,
+            )
+            listing = list_backups(backup_root)
+            profiles_found = {
+                item.get("profile") for item in listing["backups"]
+            }
+            self.assertIn("codex", profiles_found)
+            self.assertIn("claude-code", profiles_found)
+
+    def test_standalone_restore_claude_code_uses_claude_home(self) -> None:
+        from agent_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            result = create_backup(
+                home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-code-standalone-test",
+                run_doctor_commands=False,
+            )
+            standalone = subprocess.run(
+                [
+                    sys.executable,
+                    result["restore_kit"]["restore_py"],
+                    "--backup-dir",
+                    result["backup_dir"],
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(standalone.returncode, 0, standalone.stderr)
+            output = json.loads(standalone.stdout)
+            self.assertTrue(output["dry_run"])
+            self.assertIn(".claude", output["target_home"])
+            self.assertNotIn(".codex", output["target_home"])
+
+
+    # -- Fix 2: Cross-profile restore mismatch warning --
+    def test_restore_warns_on_profile_mismatch(self) -> None:
+        from agent_environment_backup.core import (
+            create_backup, restore_backup, CODEX_PROFILE, CLAUDE_CODE_PROFILE,
+        )
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            claude_home = self.make_claude_code_home(root)
+            backup_result = create_backup(
+                claude_home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-mismatch-test",
+                run_doctor_commands=False,
+            )
+            archive = Path(backup_result["archive"])
+            result = restore_backup(archive, root / "target", profile=CODEX_PROFILE)
+            self.assertTrue(result["dry_run"])
+            self.assertTrue(result.get("profile_mismatch"))
+            self.assertEqual(result["profile_mismatch"]["backup_profile"], "claude-code")
+            self.assertEqual(result["profile_mismatch"]["restore_profile"], "codex")
+
+    # -- Fix 4: Thread extra_excluded_dirs through restore --
+    def test_restore_respects_profile_exclusions(self) -> None:
+        from agent_environment_backup.core import (
+            create_backup, restore_backup, CLAUDE_CODE_PROFILE,
+        )
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            cache_dir = home / "cache"
+            cache_dir.mkdir()
+            (cache_dir / "temp.bin").write_text("cached", encoding="utf-8")
+            result = create_backup(
+                home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="excl-test",
+                run_doctor_commands=False,
+            )
+            manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+            paths = {e["relative_path"] for e in manifest["entries"]}
+            self.assertNotIn("cache/temp.bin", paths)
+
+    # -- Fix 6: Generalize remaining hardcoded text --
+    def test_snapshot_uses_profile_display_name(self) -> None:
+        from agent_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            result = create_backup(
+                home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="snapshot-text-test",
+                run_doctor_commands=False,
+            )
+            snapshot = (Path(result["backup_dir"]) / "environment-snapshot.txt").read_text(encoding="utf-8")
+            self.assertIn("Claude Code", snapshot)
+            self.assertNotIn("Codex environment snapshot", snapshot)
+
+    # -- Fix 7: Collision-suffixed backup_name --
+    def test_backup_name_matches_directory_after_collision(self) -> None:
+        from agent_environment_backup.core import create_backup, CODEX_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_home(root)
+            backup_root = root / "backups"
+            result1 = create_backup(
+                home, backup_root=backup_root, profile=CODEX_PROFILE,
+                timestamp="collide-test", run_doctor_commands=False,
+            )
+            result2 = create_backup(
+                home, backup_root=backup_root, profile=CODEX_PROFILE,
+                timestamp="collide-test", run_doctor_commands=False,
+            )
+            manifest2 = json.loads(Path(result2["manifest"]).read_text(encoding="utf-8"))
+            self.assertEqual(manifest2["backup_name"], Path(result2["backup_dir"]).name)
+
+
+    # -- Issue 1: Standalone pre-restore backup manifest includes profile field --
+    def test_standalone_pre_restore_manifest_has_profile(self) -> None:
+        from agent_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            result = create_backup(
+                home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-standalone-profile-test",
+                run_doctor_commands=False,
+            )
+            standalone_target = root / "standalone-restore-target"
+            standalone_target.mkdir()
+            (standalone_target / "settings.json").write_text('{"old":true}', encoding="utf-8")
+            standalone_prebacks = root / "standalone-prebacks"
+            standalone_apply = subprocess.run(
+                [
+                    sys.executable,
+                    result["restore_kit"]["restore_py"],
+                    "--backup-dir",
+                    result["backup_dir"],
+                    "--target-home",
+                    str(standalone_target),
+                    "--backup-root",
+                    str(standalone_prebacks),
+                    "--apply",
+                    "--confirm",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(standalone_apply.returncode, 0, standalone_apply.stderr)
+            pre_restore_dirs = sorted(standalone_prebacks.glob("pre-restore-claude-code-backup-*"))
+            self.assertTrue(pre_restore_dirs, "No pre-restore backup created")
+            pre_manifest_path = pre_restore_dirs[0] / "manifest.json"
+            self.assertTrue(pre_manifest_path.exists())
+            pre_manifest = json.loads(pre_manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(pre_manifest.get("profile"), "claude-code")
+
+    # -- Issue 2: Standalone restore uses profile-specific exclusions --
+    def test_standalone_restore_excludes_profile_dirs(self) -> None:
+        from agent_environment_backup.core import create_backup, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            result = create_backup(
+                home,
+                backup_root=root / "backups",
+                profile=CLAUDE_CODE_PROFILE,
+                timestamp="claude-excl-standalone-test",
+                run_doctor_commands=False,
+            )
+            # Manually place a cache/ dir inside the backup files dir
+            # to simulate a backup that contains cache files (e.g., from an older version)
+            backup_files = Path(result["backup_dir"]) / "files"
+            cache_dir = backup_files / "cache"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            (cache_dir / "stale.bin").write_text("stale", encoding="utf-8")
+
+            standalone_target = root / "standalone-excl-target"
+            standalone_target.mkdir()
+            standalone_apply = subprocess.run(
+                [
+                    sys.executable,
+                    result["restore_kit"]["restore_py"],
+                    "--backup-dir",
+                    result["backup_dir"],
+                    "--target-home",
+                    str(standalone_target),
+                    "--apply",
+                    "--confirm",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(standalone_apply.returncode, 0, standalone_apply.stderr)
+            # The cache/stale.bin should have been skipped during restore
+            self.assertFalse(
+                (standalone_target / "cache" / "stale.bin").exists(),
+                "Standalone restore should skip profile-excluded dirs (cache for claude-code)",
+            )
+
+    # -- Issue 5a: doctor count_tree uses extra_excluded_dirs --
+    def test_doctor_count_tree_respects_extra_excluded_dirs(self) -> None:
+        from agent_environment_backup.core import doctor_environment, CLAUDE_CODE_PROFILE
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            home = self.make_claude_code_home(root)
+            # Create a cache dir with files that should be excluded from counting
+            cache_dir = home / "projects" / "cache"
+            cache_dir.mkdir(parents=True)
+            (cache_dir / "big.bin").write_text("cached data", encoding="utf-8")
+
+            report = doctor_environment(home, profile=CLAUDE_CODE_PROFILE, run_commands=False)
+            projects_info = report["paths"]["projects"]
+            # The cache dir and its file should not be counted
+            self.assertEqual(projects_info["dirs"], 0, "cache subdir should be excluded from dir count")
+            self.assertEqual(projects_info["files"], 0, "files under cache should be excluded")
+
+    # -- Issue 5b: backup_list_item defaults missing profile to "codex" --
+    def test_list_backups_defaults_missing_profile_to_codex(self) -> None:
+        with self.temp_root() as temp_dir:
+            root = Path(temp_dir)
+            backup_root = root / "backups"
+            legacy = backup_root / "old-backup"
+            legacy.mkdir(parents=True)
+            (legacy / "manifest.json").write_text(
+                json.dumps({
+                    "schema_version": 1,
+                    "created_at": "2026-01-01T00:00:00",
+                    "backup_name": "old-backup",
+                    "counts": {"files": 1, "sqlite_databases": 0, "errors": 0},
+                    "entries": [],
+                }) + "\n",
+                encoding="utf-8",
+            )
+            (legacy / "files").mkdir()
+            listing = list_backups(backup_root)
+            item = listing["backups"][0]
+            self.assertEqual(item["profile"], "codex",
+                             "Missing profile field should default to 'codex'")
 
 
 if __name__ == "__main__":
