@@ -484,7 +484,7 @@ def doctor_environment(
     home_override: str | os.PathLike[str] | None = None,
     *,
     profile: EnvironmentProfile | None = None,
-    run_commands: bool = True,
+    run_commands: bool = False,
 ) -> dict[str, Any]:
     if profile is None:
         profile = CODEX_PROFILE
@@ -572,7 +572,7 @@ def doctor_environment(
 def doctor_codex_environment(
     codex_home: str | os.PathLike[str] | None = None,
     *,
-    run_commands: bool = True,
+    run_commands: bool = False,
 ) -> dict[str, Any]:
     return doctor_environment(codex_home, profile=CODEX_PROFILE, run_commands=run_commands)
 
@@ -1288,7 +1288,7 @@ def create_backup(
     archive_format: str = "tar.gz",
     make_archive: bool = True,
     timestamp: str | None = None,
-    run_doctor_commands: bool = True,
+    run_doctor_commands: bool = False,
 ) -> dict[str, Any]:
     if profile is None:
         profile = CODEX_PROFILE

@@ -14,7 +14,7 @@ Fetch and follow instructions from https://raw.githubusercontent.com/gaoguobin/c
 
 - Git repo: `~/.claude/agent-environment-backup`
 - Python package: editable user install of `agent-environment-backup`
-- Skill namespace link: `~/.claude/skills/claude-code-environment-backup -> ~/.claude/agent-environment-backup/skills`
+- Skill link: `~/.claude/skills/claude-code-environment-backup -> ~/.claude/agent-environment-backup/skills/claude-code-environment-backup`
 
 The install does not create a backup, restore anything, change providers, write hooks, or upload data.
 
@@ -32,6 +32,7 @@ Run this PowerShell block exactly:
 $repoRoot = Join-Path $HOME '.claude\agent-environment-backup'
 $skillsRoot = Join-Path $HOME '.claude\skills'
 $skillNamespace = Join-Path $skillsRoot 'claude-code-environment-backup'
+$skillSource = Join-Path $repoRoot 'skills\claude-code-environment-backup'
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     throw 'git is required before installing agent-environment-backup.'
@@ -72,7 +73,7 @@ if (Test-Path $skillNamespace) {
 New-Item -ItemType Directory -Force -Path $skillsRoot | Out-Null
 git clone https://github.com/gaoguobin/codex-environment-backup.git $repoRoot
 & $pythonCmd -m pip install --user -e $repoRoot
-cmd /d /c "mklink /J `"$skillNamespace`" `"$repoRoot\skills`""
+cmd /d /c "mklink /J `"$skillNamespace`" `"$skillSource`""
 & $pythonCmd -m agent_environment_backup --profile claude-code doctor
 ```
 
@@ -86,6 +87,7 @@ set -euo pipefail
 repo_root="$HOME/.claude/agent-environment-backup"
 skills_root="$HOME/.claude/skills"
 skill_namespace="$skills_root/claude-code-environment-backup"
+skill_source="$repo_root/skills/claude-code-environment-backup"
 
 command -v git >/dev/null || { echo "git is required before installing agent-environment-backup." >&2; exit 1; }
 python_cmd="${PYTHON:-}"
@@ -120,7 +122,7 @@ fi
 mkdir -p "$skills_root"
 git clone https://github.com/gaoguobin/codex-environment-backup.git "$repo_root"
 "$python_cmd" -m pip install --user -e "$repo_root"
-ln -s "$repo_root/skills" "$skill_namespace"
+ln -s "$skill_source" "$skill_namespace"
 "$python_cmd" -m agent_environment_backup --profile claude-code doctor
 ```
 

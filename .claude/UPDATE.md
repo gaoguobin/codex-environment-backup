@@ -21,6 +21,7 @@ Run this PowerShell block exactly:
 ```powershell
 $repoRoot = Join-Path $HOME '.claude\agent-environment-backup'
 $skillNamespace = Join-Path $HOME '.claude\skills\claude-code-environment-backup'
+$skillSource = Join-Path $repoRoot 'skills\claude-code-environment-backup'
 $pythonCmd = $null
 
 foreach ($candidate in @('python3', 'python')) {
@@ -55,7 +56,15 @@ git -C $repoRoot pull --ff-only
 
 if (-not (Test-Path $skillNamespace)) {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $skillNamespace) | Out-Null
-    cmd /d /c "mklink /J `"$skillNamespace`" `"$repoRoot\skills`""
+    cmd /d /c "mklink /J `"$skillNamespace`" `"$skillSource`""
+} elseif (-not (Test-Path (Join-Path $skillNamespace 'SKILL.md'))) {
+    $skillItem = Get-Item -LiteralPath $skillNamespace
+    if (($skillItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        cmd /d /c "rmdir `"$skillNamespace`""
+        cmd /d /c "mklink /J `"$skillNamespace`" `"$skillSource`""
+    } else {
+        throw "Existing skill path is not a link and does not contain SKILL.md: $skillNamespace"
+    }
 }
 
 & $pythonCmd -m agent_environment_backup --profile claude-code doctor
@@ -70,6 +79,7 @@ set -euo pipefail
 
 repo_root="$HOME/.claude/agent-environment-backup"
 skill_namespace="$HOME/.claude/skills/claude-code-environment-backup"
+skill_source="$repo_root/skills/claude-code-environment-backup"
 python_cmd="${PYTHON:-}"
 
 if [ -n "$python_cmd" ]; then
@@ -100,7 +110,15 @@ git -C "$repo_root" pull --ff-only
 
 if [ ! -e "$skill_namespace" ]; then
   mkdir -p "$(dirname "$skill_namespace")"
-  ln -s "$repo_root/skills" "$skill_namespace"
+  ln -s "$skill_source" "$skill_namespace"
+elif [ ! -f "$skill_namespace/SKILL.md" ]; then
+  if [ -L "$skill_namespace" ]; then
+    rm "$skill_namespace"
+    ln -s "$skill_source" "$skill_namespace"
+  else
+    echo "Existing skill path is not a link and does not contain SKILL.md: $skill_namespace" >&2
+    exit 1
+  fi
 fi
 
 "$python_cmd" -m agent_environment_backup --profile claude-code doctor

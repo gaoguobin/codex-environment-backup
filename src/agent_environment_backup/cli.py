@@ -40,7 +40,12 @@ def build_parser() -> argparse.ArgumentParser:
     backup.add_argument(
         "--no-doctor-commands",
         action="store_true",
-        help="Skip external doctor commands such as codex --version.",
+        help="Deprecated compatibility flag. Backup embeds a structural doctor by default.",
+    )
+    backup.add_argument(
+        "--run-doctor-commands",
+        action="store_true",
+        help="Also run profile-specific external doctor commands during backup.",
     )
 
     restore = subparsers.add_parser("restore", help="Dry-run or apply a restore")
@@ -74,7 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument(
         "--run-commands",
         action="store_true",
-        help="Also run external codex and optional integration commands.",
+        help="Also run profile-specific external commands and optional integration checks.",
     )
 
     list_cmd = subparsers.add_parser("list-backups", help="List local backup manifests")
@@ -91,13 +96,15 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "backup":
+            if args.run_doctor_commands and args.no_doctor_commands:
+                parser.error("backup accepts only one of --run-doctor-commands or --no-doctor-commands")
             result = create_backup(
                 args.home,
                 backup_root=args.backup_root,
                 profile=profile,
                 archive_format=args.format,
                 make_archive=not args.no_archive,
-                run_doctor_commands=not args.no_doctor_commands,
+                run_doctor_commands=args.run_doctor_commands,
             )
             emit_json(result)
             return 0 if result.get("ok") else 1

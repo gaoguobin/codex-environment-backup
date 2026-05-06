@@ -53,6 +53,7 @@ if (-not (Test-Path $repoRoot)) {
 }
 
 git -C $repoRoot pull --ff-only
+& $pythonCmd -m pip uninstall -y codex-environment-backup
 & $pythonCmd -m pip install --user -e $repoRoot
 
 if (-not (Test-Path $skillNamespace)) {
@@ -98,6 +99,7 @@ if [ ! -d "$repo_root" ]; then
 fi
 
 git -C "$repo_root" pull --ff-only
+"$python_cmd" -m pip uninstall -y codex-environment-backup
 "$python_cmd" -m pip install --user -e "$repo_root"
 
 if [ ! -e "$skill_namespace" ]; then

@@ -100,7 +100,7 @@ For listing backups:
 <python-cmd> -m agent_environment_backup --profile claude-code list-backups
 ```
 
-Report `core_ok`, `path_scan_ok`, `command_ok`, whether command probes were skipped, and presence/counts for config, hooks, sessions, archived sessions, memories, skills, plugins, and rules. Do not print provider URLs, local state paths, or full integration stdout from optional integrations.
+Report `core_ok`, `path_scan_ok`, `command_ok`, whether command probes were skipped, and presence/counts for `settings.json`, `settings.local.json`, `credentials.json`, `statsig`, `projects`, `memory`, `todos`, `plugins`, and `keybindings.json`. Do not print provider URLs, local state paths, or full integration stdout from optional integrations.
 
 ## Install, update, uninstall
 
@@ -115,7 +115,7 @@ These flows are still natural-language initiated. The user should paste or ask C
 ## Safety model
 
 - Treat every backup archive as sensitive. It can contain conversation history, login state, provider configuration, local hooks, skills, plugins, rules, and third-party provider settings.
-- Do not print API keys, `auth.json` contents, conversation contents, request bodies, or full session files.
+- Do not print API keys, `credentials.json` contents, conversation contents, request bodies, or full session files.
 - Do not upload backup archives to GitHub or any remote storage unless the user explicitly asks after the sensitivity warning.
 - Do not delete old backups by default.
 - Before deleting old backups, verify that a newer backup reported `ok=true`, has an archive and SHA256 file, appears in `list-backups`, and passes restore dry-run.

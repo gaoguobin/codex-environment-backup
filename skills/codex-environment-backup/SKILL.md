@@ -64,9 +64,9 @@ Hard boundary: if applying to the same `CODEX_HOME` used by the current Codex Ap
 
 - If the user has a backup directory, point them to `RESTORE.md` and the platform helper in that directory. Use `RESTORE_INSTRUCTIONS.txt` as a plain-text fallback.
 - If the user has a backup archive, tell them to extract it first, open `RESTORE.md` or `RESTORE_INSTRUCTIONS.txt`, close Codex App, and run the platform helper.
-- On Windows, the normal non-command handoff is double-clicking `restore-codex-environment.cmd`.
-- On macOS, the normal non-command handoff is opening `restore-codex-environment.command`.
-- On Linux, use `restore-codex-environment.sh`.
+- On Windows, the normal non-command handoff is double-clicking `restore-environment.cmd`.
+- On macOS, the normal non-command handoff is opening `restore-environment.command`.
+- On Linux, use `restore-environment.sh`.
 
 Provide the exact CLI handoff only for advanced users or when the restore helper is missing.
 

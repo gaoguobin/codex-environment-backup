@@ -709,6 +709,42 @@ service_tier = "auto"
         self.assertTrue(args.run_commands)
         self.assertFalse(args.no_run_commands)
 
+    def test_cli_backup_embeds_structural_doctor_by_default(self) -> None:
+        import agent_environment_backup.cli as cli_module
+
+        with mock.patch.object(cli_module, "emit_json"), mock.patch.object(
+            cli_module, "create_backup", return_value={"ok": True}
+        ) as create_mock:
+            return_code = cli_module.main(["backup", "--home", "/tmp/home", "--no-archive"])
+
+        self.assertEqual(return_code, 0)
+        self.assertFalse(create_mock.call_args.kwargs["run_doctor_commands"])
+
+    def test_cli_backup_supports_explicit_command_probe(self) -> None:
+        import agent_environment_backup.cli as cli_module
+
+        with mock.patch.object(cli_module, "emit_json"), mock.patch.object(
+            cli_module, "create_backup", return_value={"ok": True}
+        ) as create_mock:
+            return_code = cli_module.main([
+                "backup", "--home", "/tmp/home", "--run-doctor-commands",
+            ])
+
+        self.assertEqual(return_code, 0)
+        self.assertTrue(create_mock.call_args.kwargs["run_doctor_commands"])
+
+    def test_core_doctor_and_backup_defaults_are_structural(self) -> None:
+        import inspect
+
+        self.assertIs(
+            inspect.signature(core_module.doctor_environment).parameters["run_commands"].default,
+            False,
+        )
+        self.assertIs(
+            inspect.signature(core_module.create_backup).parameters["run_doctor_commands"].default,
+            False,
+        )
+
     def test_cli_profile_argument_default(self) -> None:
         from agent_environment_backup.cli import build_parser
         args = build_parser().parse_args(["doctor"])

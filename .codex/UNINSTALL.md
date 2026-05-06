@@ -59,7 +59,7 @@ if (-not $pythonCmd) {
 }
 
 if ($pythonCmd) {
-    & $pythonCmd -m pip uninstall -y codex-environment-backup
+    & $pythonCmd -m pip uninstall -y agent-environment-backup codex-environment-backup
 }
 
 if (Test-Path $skillNamespace) {
@@ -101,7 +101,7 @@ if [ -z "$python_cmd" ]; then
 fi
 
 if [ -n "$python_cmd" ]; then
-  "$python_cmd" -m pip uninstall -y codex-environment-backup
+  "$python_cmd" -m pip uninstall -y agent-environment-backup codex-environment-backup
 fi
 
 if [ -L "$skill_namespace" ] || [ -e "$skill_namespace" ]; then
