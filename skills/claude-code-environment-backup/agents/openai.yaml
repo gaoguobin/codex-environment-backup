@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude Code Environment Backup"
+  short_description: "Back up and restore Claude Code state."
+  default_prompt: "Use $claude-code-environment-backup to back up the current Claude Code environment and report the local archive path, SHA256, and safety note."

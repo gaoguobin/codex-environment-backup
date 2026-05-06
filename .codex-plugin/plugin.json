@@ -1,0 +1,47 @@
+{
+  "name": "agent-environment-backup",
+  "version": "0.2.0",
+  "description": "Agent Skills and Python CLI for offline Codex and Claude Code environment backup, restore, and health checks.",
+  "author": {
+    "name": "gaoguobin",
+    "url": "https://github.com/gaoguobin"
+  },
+  "homepage": "https://github.com/gaoguobin/codex-environment-backup#readme",
+  "repository": "https://github.com/gaoguobin/codex-environment-backup",
+  "license": "MIT",
+  "keywords": [
+    "agent-skills",
+    "codex",
+    "openai-codex",
+    "codex-skill",
+    "claude-code",
+    "ai-agents",
+    "environment-backup",
+    "backup-restore",
+    "sqlite-backup",
+    "local-first"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Agent Environment Backup",
+    "shortDescription": "Back up and restore local agent environments.",
+    "longDescription": "Bundle Agent Skills and a Python CLI for local, offline Codex and Claude Code environment backup, restore, listing, and health checks.",
+    "developerName": "gaoguobin",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Local workflow",
+      "Backup",
+      "Restore",
+      "Health checks"
+    ],
+    "websiteURL": "https://github.com/gaoguobin/codex-environment-backup",
+    "privacyPolicyURL": "https://github.com/gaoguobin/codex-environment-backup#safety-model",
+    "termsOfServiceURL": "https://github.com/gaoguobin/codex-environment-backup/blob/main/LICENSE",
+    "defaultPrompt": [
+      "Back up current Codex environment.",
+      "List Codex environment backups.",
+      "Back up current Claude Code environment."
+    ],
+    "brandColor": "#10A37F"
+  }
+}

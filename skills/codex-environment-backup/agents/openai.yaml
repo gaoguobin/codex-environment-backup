@@ -1,3 +1,4 @@
-display_name: Codex Environment Backup
-short_description: Back up, restore, and inspect local Codex environment state.
-default_prompt: Back up the current Codex environment and report the local archive path, SHA256, and safety note.
+interface:
+  display_name: "Codex Environment Backup"
+  short_description: "Back up and restore Codex state."
+  default_prompt: "Use $codex-environment-backup to back up the current Codex environment and report the local archive path, SHA256, and safety note."

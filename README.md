@@ -1,5 +1,7 @@
 # codex-environment-backup
 
+[![CI](https://github.com/gaoguobin/codex-environment-backup/actions/workflows/ci.yml/badge.svg)](https://github.com/gaoguobin/codex-environment-backup/actions/workflows/ci.yml)
+
 Offline backup, restore, and health checks for local Codex and Claude Code
 environments. The `--profile codex|claude-code` flag selects which environment
 to operate on; Codex is the default.
@@ -9,7 +11,7 @@ language. The Python CLI is the deterministic implementation layer and remains
 available for advanced users, automation, smoke tests, and recovery when the
 agent itself is unavailable.
 
-[中文说明](#chinese) · [Install](#install) · [Daily Use](#daily-use) · [Restore](#restore) · [Update](#update) · [Uninstall](#uninstall) · [Safety](#safety-model) · [Advanced CLI](#advanced-cli)
+[中文说明](#chinese) · [Agent Skills](#agent-skills-and-discovery) · [Plugin Readiness](#plugin-readiness) · [Install](#install) · [Daily Use](#daily-use) · [Restore](#restore) · [Update](#update) · [Uninstall](#uninstall) · [Safety](#safety-model) · [Advanced CLI](#advanced-cli)
 
 ## Why
 
@@ -29,6 +31,68 @@ workflow instead of relying on memory or manual copy steps.
 | Restore guarded | Restore defaults to dry-run, requires explicit apply confirmation, and creates a pre-restore backup first. |
 | No-command handoff | Each backup includes `RESTORE.md`, plain-text instructions, platform helpers, and a standalone restore script. |
 | Sandbox conservative | `.sandbox-secrets`, sandbox caches, temp folders, and live SQLite WAL/SHM files are excluded. |
+
+## Agent Skills and Discovery
+
+This repository includes Agent Skills for local environment backup workflows:
+
+| Skill | Path | Primary use case |
+| --- | --- | --- |
+| `codex-environment-backup` | `skills/codex-environment-backup/SKILL.md` | Let Codex back up, restore, inspect, list, install, update, and uninstall local Codex environment backups. |
+| `claude-code-environment-backup` | `skills/claude-code-environment-backup/SKILL.md` | Let Claude Code back up, restore, inspect, list, install, update, and uninstall local Claude Code environment backups. |
+
+Tools that index public GitHub repositories for Agent Skills can discover the
+skills at the paths above. This project does not claim to be listed on SkillsMP
+or any other marketplace, and it is not an official OpenAI plugin or official
+marketplace project.
+
+Typical natural-language triggers:
+
+```text
+Back up current Codex environment
+List Codex environment backups
+Check Codex environment backup health
+Restore this Codex backup
+Back up current Claude Code environment
+List Claude Code environment backups
+Check Claude Code environment backup health
+Restore this Claude Code backup
+```
+
+Safety boundaries for both skills:
+
+- Backups are local and sensitive; the tool does not upload archives.
+- Restore is dry-run by default and requires explicit apply confirmation.
+- Apply restore creates a pre-restore backup first.
+- API keys, auth payloads, and conversation contents are not printed.
+- `.sandbox-secrets`, sandbox/temp directories, and live SQLite WAL/SHM files are excluded.
+- ACLs, hooks, providers, and install state are not changed unless the user asks for the corresponding install/update/uninstall/restore workflow.
+
+Doctor and smoke checks:
+
+```powershell
+python -m agent_environment_backup doctor
+python -m agent_environment_backup --profile claude-code doctor
+python -m agent_environment_backup list-backups
+python -m unittest discover -s tests
+```
+
+There is no benchmark command; this repository focuses on backup, restore,
+listing, and health checks.
+
+## Plugin Readiness
+
+Codex plugin documentation defines a plugin as a package with a required
+`.codex-plugin/plugin.json` manifest and optional bundled `skills/`, apps, MCP
+servers, hooks, and assets. This repository includes plugin metadata that points
+to `./skills/` so future Codex plugin tooling can identify the bundled Agent
+Skills.
+
+Current supported installation is still the Codex-managed or Claude
+Code-managed flow in [Install](#install). The plugin metadata is preparatory
+discovery and packaging metadata only; it does not install hooks, change
+provider config, start background services, restore files, or imply an official
+marketplace listing.
 
 ## Install
 
@@ -485,6 +549,24 @@ Fetch and follow instructions from https://raw.githubusercontent.com/gaoguobin/c
   `base_url`、`env_key`、`service_tier` 等都会作为文件备份，但不会泄露内容到日志。
 - `codex-fast-proxy` 只是可选集成；检测到可用时记录安全摘要，不打印 provider URL、本机状态路径或完整 stdout；
   不可用时记为 skipped，不会失败。
+
+### Agent Skill 和可发现性
+
+这个仓库包含两个 Agent Skill：
+
+| Skill | 路径 | 用途 |
+| --- | --- | --- |
+| `codex-environment-backup` | `skills/codex-environment-backup/SKILL.md` | 让 Codex 管理本地 Codex 环境备份、恢复、体检、列表、安装、更新和卸载。 |
+| `claude-code-environment-backup` | `skills/claude-code-environment-backup/SKILL.md` | 让 Claude Code 管理本地 Claude Code 环境备份、恢复、体检、列表、安装、更新和卸载。 |
+
+会索引公开 GitHub 仓库中 Agent Skills 的工具，可以通过上面的路径发现这些 skill。本项目不声称已经被
+SkillsMP 或其它 marketplace 收录，也不声称是 OpenAI 官方 plugin 或官方 marketplace 项目。
+
+### Plugin readiness
+
+当前仓库包含 `.codex-plugin/plugin.json`，并指向根目录下的 `./skills/`。这只是为 Codex plugin
+分发格式做准备的发现/打包元数据，不会改变安装流程、不会安装 hook、不会改 provider 配置、不会启动
+后台服务，也不代表已经进入官方 marketplace。
 
 ### 高级 CLI
 

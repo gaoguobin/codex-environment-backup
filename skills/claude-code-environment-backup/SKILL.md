@@ -1,6 +1,6 @@
 ---
 name: claude-code-environment-backup
-description: Back up, restore, inspect, list, install, update, or uninstall local Claude Code environment backup tooling. Use when the user asks to back up the current Claude Code environment, restore Claude Code from a backup, check whether a backup is valid, list Claude Code backups, install/update/uninstall the Claude Code backup skill, or set up manual/periodic Claude Code environment backup workflows with phrases such as "备份 Claude Code 环境", "恢复 Claude Code 备份", "检查 Claude Code 备份", "列出 Claude Code 备份", "安装 Claude Code 环境备份工具", "更新 Claude Code 环境备份工具", "卸载 Claude Code 环境备份工具", or "back up Claude Code environment", "restore Claude Code backup", "check Claude Code backup health", "list Claude Code backups".
+description: Claude Code environment backup, restore, doctor, and list workflows for local ~/.claude state. Use for requests like back up Claude Code, restore Claude Code backup, list/check Claude Code backups, or install/update/uninstall the backup skill.
 ---
 
 Use this skill when the user wants Claude Code to manage local Claude Code environment backups. The user-facing interface is natural language; the Python CLI is the source of truth that Claude Code runs behind the scenes.

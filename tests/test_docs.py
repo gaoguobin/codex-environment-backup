@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -15,6 +17,8 @@ class DocumentationShapeTests(unittest.TestCase):
         readme = self.read("README.md")
         self.assertIn("[中文说明](#chinese)", readme)
         self.assertIn("## 中文说明", readme)
+        self.assertIn("[Agent Skills](#agent-skills-and-discovery)", readme)
+        self.assertIn("[Plugin Readiness](#plugin-readiness)", readme)
         self.assertIn("Fetch and follow instructions from", readme)
         self.assertIn("备份当前 Codex 环境", readme)
         self.assertIn(".claude/INSTALL.md", readme)
@@ -24,6 +28,28 @@ class DocumentationShapeTests(unittest.TestCase):
         self.assertIn("restore-environment.cmd", readme)
         self.assertLess(readme.index("## Daily Use"), readme.index("## Advanced CLI"))
         self.assertLess(readme.index("## 中文说明"), readme.index("### 高级 CLI"))
+
+    def test_readme_declares_agent_skills_and_discovery_boundaries(self) -> None:
+        readme = self.read("README.md")
+        self.assertIn("## Agent Skills and Discovery", readme)
+        self.assertIn("`codex-environment-backup`", readme)
+        self.assertIn("`skills/codex-environment-backup/SKILL.md`", readme)
+        self.assertIn("`claude-code-environment-backup`", readme)
+        self.assertIn("`skills/claude-code-environment-backup/SKILL.md`", readme)
+        self.assertIn("Tools that index public GitHub repositories for Agent Skills", readme)
+        self.assertIn("does not claim to be listed on SkillsMP", readme)
+        self.assertIn("not an official OpenAI plugin", readme)
+        self.assertIn("There is no benchmark command", readme)
+
+    def test_readme_declares_plugin_readiness_without_marketplace_claims(self) -> None:
+        readme = self.read("README.md")
+        normalized = " ".join(readme.split())
+        self.assertIn("## Plugin Readiness", readme)
+        self.assertIn("`.codex-plugin/plugin.json`", readme)
+        self.assertIn("`./skills/`", readme)
+        self.assertIn("preparatory discovery and packaging metadata only", normalized)
+        self.assertIn("does not install hooks", readme)
+        self.assertIn("imply an official marketplace listing", normalized)
 
     def test_codex_lifecycle_docs_keep_chinese_handoff(self) -> None:
         install = self.read(".codex/INSTALL.md")
@@ -97,6 +123,51 @@ class DocumentationShapeTests(unittest.TestCase):
         self.assertIn("--profile codex", skill)
         self.assertNotIn("restore-codex-environment", skill)
         self.assertIn("restore-environment.cmd", skill)
+
+    def test_skill_ui_metadata_exists_for_both_skills(self) -> None:
+        codex = self.read("skills/codex-environment-backup/agents/openai.yaml")
+        claude = self.read("skills/claude-code-environment-backup/agents/openai.yaml")
+        self.assertIn("interface:", codex)
+        self.assertIn('display_name: "Codex Environment Backup"', codex)
+        self.assertIn("$codex-environment-backup", codex)
+        self.assertIn("interface:", claude)
+        self.assertIn('display_name: "Claude Code Environment Backup"', claude)
+        self.assertIn("$claude-code-environment-backup", claude)
+
+    def test_pyproject_has_discovery_metadata(self) -> None:
+        data = tomllib.loads(self.read("pyproject.toml"))
+        project = data["project"]
+        self.assertEqual(project["name"], "agent-environment-backup")
+        for keyword in (
+            "agent-skills",
+            "codex",
+            "openai-codex",
+            "codex-skill",
+            "claude-code",
+            "environment-backup",
+            "backup-restore",
+            "sqlite-backup",
+        ):
+            self.assertIn(keyword, project["keywords"])
+        urls = project["urls"]
+        self.assertEqual(urls["Repository"], "https://github.com/gaoguobin/codex-environment-backup")
+        self.assertEqual(urls["Issues"], "https://github.com/gaoguobin/codex-environment-backup/issues")
+        self.assertIn("#readme", urls["Documentation"])
+
+    def test_codex_plugin_manifest_is_valid_and_points_to_skills(self) -> None:
+        manifest = json.loads(self.read(".codex-plugin/plugin.json"))
+        self.assertEqual(manifest["name"], "agent-environment-backup")
+        self.assertEqual(manifest["skills"], "./skills/")
+        self.assertEqual(manifest["repository"], "https://github.com/gaoguobin/codex-environment-backup")
+        self.assertIn("agent-skills", manifest["keywords"])
+        self.assertIn("codex", manifest["keywords"])
+        self.assertIn("claude-code", manifest["keywords"])
+        self.assertIn("interface", manifest)
+        self.assertEqual(manifest["interface"]["category"], "Developer Tools")
+        self.assertLessEqual(len(manifest["interface"]["defaultPrompt"]), 3)
+        self.assertNotIn("hooks", manifest)
+        self.assertNotIn("mcpServers", manifest)
+        self.assertNotIn("apps", manifest)
 
 
 if __name__ == "__main__":
