@@ -487,7 +487,7 @@ service_tier = "auto"
                             "ok": True,
                             "service_tier": "priority",
                             "upstream_base": "https://private.example/v1",
-                            "runtime_id": "secret-runtime-id",
+                            "runtime_id": "SAMPLE-RUNTIME-ID",
                         },
                     }
                     return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
@@ -503,7 +503,7 @@ service_tier = "auto"
             encoded = json.dumps(report)
             self.assertNotIn("private-provider", encoded)
             self.assertNotIn("https://private.example/v1", encoded)
-            self.assertNotIn("secret-runtime-id", encoded)
+            self.assertNotIn("SAMPLE-RUNTIME-ID", encoded)
             status_result = report["commands"]["codex_fast_proxy_status"]
             self.assertNotIn("stdout", status_result)
             self.assertTrue(status_result["stdout_summary"]["provider_present"])
